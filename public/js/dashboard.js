@@ -27,7 +27,7 @@
   let selectedKey = null;    // the reading shown large in the focus panel, on the chart and on the map
   let range = 900000;        // chart window in ms, 0 = all
   let cloud = false;         // true on Vercel: poll instead of SSE, Blynk only
-  let pollMs = 3000;
+  let pollMs = 2000;
   let pollTimer = null;
   const LOCAL_ONLY = 'Available only when running on the same network (npm start)';
   const GAP_MS = 20000;      // readings further apart than this: no data in between (tab closed, device offline)
@@ -87,7 +87,7 @@
     rebuild();
   }
 
-  // ---------- Vercel: poll Blynk through /api/latest (cached 3 s on the CDN), only while the tab is visible ----------
+  // ---------- Vercel: poll Blynk through /api/latest (cached for one poll on the CDN), only while the tab is visible ----------
   function startPolling() {
     clearTimeout(pollTimer);
     const run = async () => {
@@ -688,7 +688,7 @@
     try {
       const config = await (await fetch('/api/config')).json();
       cloud = config.deployment === 'vercel';
-      pollMs = config.pollMs || 3000;
+      pollMs = config.pollMs || 2000;
     } catch { /* older server: behave as local */ }
     if (cloud) {
       const btn = document.querySelector('[data-source="local"]');

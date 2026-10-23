@@ -20,15 +20,15 @@ The Blynk token is only used server-side; no endpoint returns it. No dashboard o
 
 Blynk only. No `app.listen`, no background pollers, no files written, no SSE (`/api/stream` returns 404).
 `/api/latest?source=blynk` reads Blynk on demand: one multi-pin `get` for every pin in `sensors.json`, plus
-`isHardwareConnected` at most every 12 s. Answers are cached for 3 s in the function and on the CDN
-(`Cache-Control: public, s-maxage=3, stale-while-revalidate=10`). `latest` is `null` while the device is offline.
+`isHardwareConnected` at most every 12 s. Answers are cached for one poll interval (2 s) in the function and on the CDN
+(`Cache-Control: public, s-maxage=2, stale-while-revalidate=2`). `latest` is `null` while the device is offline.
 Errors: `503 { configured: false, error }` when `BLYNK_TOKEN` is missing, `502 { error }` when Blynk fails,
 `400` for `source=local`. `/api/history`, `/api/status` and `/api/export.csv` exist but hold no data there;
 the dashboard keeps history in the tab and builds the CSV itself.
 
 ## Blynk source
 
-While a `source=blynk` stream is open, every `BLYNK_POLL_MS` (default 3000):
+While a `source=blynk` stream is open, every `BLYNK_POLL_MS` (default 2000):
 
 - `GET https://{BLYNK_SERVER}/external/api/get?v0[&v1...]&token=...` - one pin returns a raw value (`1`),
   several return `{"v0":"1","v1":"23.5"}`. Pins map to sensor keys through `blynkPin` in `config/sensors.json`.
@@ -38,7 +38,7 @@ Errors and rate limits are logged and back off (doubling, up to 60 s).
 
 ## Local source (pulled from the ESP32)
 
-While a `source=local` stream is open, every `LOCAL_POLL_MS` (default 2000), with a 1.5 s timeout:
+While a `source=local` stream is open, every `LOCAL_POLL_MS` (default 1000), with a 1.5 s timeout:
 
 `GET http://<esp>/data` →
 

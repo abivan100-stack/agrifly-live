@@ -62,7 +62,7 @@ so nothing needs switching by hand.
 | | Local (`npm start` on a laptop) | Vercel (public link) |
 |---|---|---|
 | Sources | Blynk Cloud **and** Local Wi-Fi | Blynk Cloud only (Local Wi-Fi button is disabled) |
-| Live updates | Server-Sent Events from the server | The page polls `/api/latest` every 3 s, paused while the tab is hidden |
+| Live updates | Server-Sent Events from the server | The page polls `/api/latest` every 2 s, paused while the tab is hidden |
 | History | `data/readings.jsonl` on the laptop | Kept in the browser tab only (last ~2000 readings) |
 | Download CSV | Built by the server | Built in the browser from what the tab has seen |
 | Env vars | `.env`: `BLYNK_TOKEN`, `BLYNK_SERVER`, optional `BLYNK_POLL_MS`, `ESP_HOST`, `LOCAL_POLL_MS`, `PORT` | Vercel project settings: `BLYNK_TOKEN` (required), `BLYNK_SERVER` (defaults to `blr1.blynk.cloud`), optional `BLYNK_POLL_MS` |
@@ -72,8 +72,8 @@ so nothing needs switching by hand.
 internet, so it can't reach a device behind your router. Blynk Cloud works because the ESP32 sends its readings
 out to Blynk, and Vercel reads them from there.
 
-**Blynk quota on Vercel:** `/api/latest` answers with `Cache-Control: public, s-maxage=3, stale-while-revalidate=10`,
-so Vercel's CDN shares one answer between all viewers for 3 s, and the function also caches for 3 s. Ten open tabs
+**Blynk quota on Vercel:** `/api/latest` answers with `Cache-Control: public, s-maxage=2, stale-while-revalidate=2`,
+so Vercel's CDN shares one answer between all viewers for 2 s (one poll), and the function also caches for 2 s. Ten open tabs
 cost about the same Blynk requests as one. The "is the device online" check runs at most every 12 s.
 
 **Set the variables on Vercel:** Vercel dashboard, then your project, then **Settings > Environment Variables**.
@@ -93,9 +93,9 @@ In the Blynk console, the template needs two datastreams:
 
 The toggle at the top switches between:
 
-- **Blynk Cloud** (default): works from any network. The server reads Blynk every 3 s (`BLYNK_POLL_MS`) while a
+- **Blynk Cloud** (default): works from any network. The server reads Blynk every 2 s (`BLYNK_POLL_MS`) while a
   dashboard shows Blynk. Status comes from Blynk's "is the device connected" check.
-- **Local Wi-Fi**: the server asks the ESP32 directly for `GET http://<esp>/data` every 2 s (`LOCAL_POLL_MS`).
+- **Local Wi-Fi**: the server asks the ESP32 directly for `GET http://<esp>/data` every 1 s (`LOCAL_POLL_MS`).
   The server and the ESP32 must be on the same network. The dashboard shows which address it uses and where it
   came from.
 
@@ -157,7 +157,7 @@ Any other key the ESP32 returns from `/data` also gets a card automatically in L
 
 ```
 server.js                     Express server: Blynk + ESP32 pollers (on demand), SSE, JSONL storage; Blynk-only on Vercel
-lib/blynk.js                  Blynk Cloud API calls (shared by both modes), 3 s cached snapshot for Vercel
+lib/blynk.js                  Blynk Cloud API calls (shared by both modes), cached snapshot for Vercel
 lib/sensors.js                config/sensors.json + reading/GPS validation
 config/sensors.json           Sensor list: key, Blynk pin, label, unit, binary/number
 public/                       Landing page and dashboard (plain HTML/CSS/JS, Chart.js + Leaflet from CDN)

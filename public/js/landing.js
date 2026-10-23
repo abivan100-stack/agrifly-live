@@ -12,7 +12,7 @@
   const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   let mode = 'demo', userChose = false, live = null; // live = { record, age }
-  let cloud = false, pollMs = 2000; // on Vercel: Blynk only, no SSE, pause while the tab is hidden
+  let cloud = false, pollMs = 1000; // on Vercel: Blynk only, no SSE, pause while the tab is hidden
   const fly = { x: 0, y: 0, steer: 0, speed: reduceMotion ? 0 : 5, alt: 8, trail: [] };
 
   // ---------- simulated field: smooth dry/wet zones ----------
@@ -184,7 +184,7 @@
     const droneLive = live && live.age <= OFFLINE_AFTER_MS;
     $('mode-hint').textContent = mode === 'demo'
       ? (droneLive ? 'The drone is sending data now. Switch to Live drone to see it.' : 'Steer over the field and watch the readings change by zone.')
-      : (droneLive ? `Showing the real drone, updated every ${pollMs / 1000} seconds.` : 'The drone is not sending data. Fly the demo instead.');
+      : (droneLive ? `Showing the real drone, updated every ${pollMs / 1000} second${pollMs === 1000 ? "" : "s"}.` : 'The drone is not sending data. Fly the demo instead.');
     $('feed-note').textContent = mode === 'demo'
       ? 'Demo readings are simulated from a made-up field. Real readings appear in Live drone mode.'
       : 'Real readings from the drone, drawn like the pilot’s on-screen display.';
@@ -300,7 +300,7 @@
   requestAnimationFrame(frame);
   fetch('/api/config').then((r) => r.json()).then((c) => {
     cloud = c.deployment === 'vercel';
-    if (cloud) pollMs = c.pollMs || 3000;
+    if (cloud) pollMs = c.pollMs || 2000;
   }).catch(() => { /* older server: behave as local */ }).finally(() => {
     poll();
     setInterval(poll, pollMs);

@@ -114,21 +114,21 @@ let server;
 
     // ---- run 3: Vercel mode, in-process (Vercel imports the app; it never listens or polls by itself) ----
     const vercelFile = path.join(os.tmpdir(), `agrifly-vercel-${process.pid}.jsonl`);
-    Object.assign(process.env, { VERCEL: '1', BLYNK_TOKEN, BLYNK_SERVER: `http://localhost:${BLYNK_PORT}`, BLYNK_POLL_MS: '3000', DATA_FILE: vercelFile });
+    Object.assign(process.env, { VERCEL: '1', BLYNK_TOKEN, BLYNK_SERVER: `http://localhost:${BLYNK_PORT}`, BLYNK_POLL_MS: '2000', DATA_FILE: vercelFile });
     const serverPath = require.resolve('../server.js');
     const VPORT = 3996, V = `http://localhost:${VPORT}`;
     const listen = (app, port = VPORT) => new Promise((r) => { const srv = app.listen(port, () => r(srv)); });
     let vServer = await listen(require(serverPath));
-    assert.deepEqual(await (await fetch(`${V}/api/config`)).json(), { deployment: 'vercel', localModeAvailable: false, pollMs: 3000 });
+    assert.deepEqual(await (await fetch(`${V}/api/config`)).json(), { deployment: 'vercel', localModeAvailable: false, pollMs: 2000 });
     const gets = blynkGets;
     const first = await fetch(`${V}/api/latest?source=blynk`);
-    assert.equal(first.headers.get('cache-control'), 'public, s-maxage=3, stale-while-revalidate=10', 'CDN may share the answer');
+    assert.equal(first.headers.get('cache-control'), 'public, s-maxage=2, stale-while-revalidate=2', 'CDN may share the answer');
     const body = await first.text();
     assert.ok(!body.includes(BLYNK_TOKEN), 'token never in /api/latest');
     const latest = JSON.parse(body);
     assert.deepEqual([latest.deviceOnline, latest.readings, latest.latest.readings], [true, { ir: { value: 1, unit: '' } }, { ir: { value: 1, unit: '' } }]);
     await Promise.all([1, 2, 3, 4, 5].map(() => fetch(`${V}/api/latest?source=blynk`)));
-    assert.equal(blynkGets - gets, 1, 'six viewers within 3 s cost one Blynk values request');
+    assert.equal(blynkGets - gets, 1, 'six viewers within 2 s cost one Blynk values request');
     assert.equal((await fetch(`${V}/api/stream?source=blynk`)).status, 404, 'no SSE on Vercel');
     assert.equal((await fetch(`${V}/api/latest?source=local`)).status, 400, 'no Local Wi-Fi on Vercel');
     assert.ok(!fs.existsSync(vercelFile), 'nothing written to disk on Vercel');

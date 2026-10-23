@@ -3,7 +3,7 @@
 //     blynk - read from Blynk Cloud's HTTPS API (while a source=blynk stream is open)
 //     local - read from the ESP32's own web server, GET http://<esp>/data (while a source=local stream is open)
 //   Vercel (process.env.VERCEL): Blynk only. No listen, no pollers, no files, no SSE; browsers poll /api/latest,
-//     which reads Blynk on demand behind a 3 s cache (in this module and on Vercel's CDN).
+//     which reads Blynk on demand behind a short cache (one poll interval) (in this module and on Vercel's CDN).
 const express = require('express');
 const fs = require('fs');
 const os = require('os');
@@ -15,9 +15,9 @@ try { process.loadEnvFile(); } catch { /* no .env file: use defaults */ }
 
 const IS_VERCEL = Boolean(process.env.VERCEL);
 const PORT = Number(process.env.PORT) || 3000;
-const BLYNK_POLL_MS = Math.max(1000, Number(process.env.BLYNK_POLL_MS) || 3000);
+const BLYNK_POLL_MS = Math.max(1000, Number(process.env.BLYNK_POLL_MS) || 2000);
 const ESP_HOST = (process.env.ESP_HOST || '').trim().replace(/^https?:\/\//, '').replace(/\/+$/, '');
-const LOCAL_POLL_MS = Math.max(500, Number(process.env.LOCAL_POLL_MS) || 2000);
+const LOCAL_POLL_MS = Math.max(500, Number(process.env.LOCAL_POLL_MS) || 1000);
 const ESP_IP_PIN = 'v10';          // the ESP32 writes its local IP here on every Blynk connect
 const MDNS_HOST = 'agrifly.local';
 const SOURCES = ['blynk', 'local'];
@@ -25,7 +25,8 @@ const MAX_MEMORY = 2000; // per source
 const DATA_FILE = process.env.DATA_FILE || path.join(__dirname, 'data', 'readings.jsonl');
 const LOCAL_ONLY = 'Available only when running on the same network (npm start).';
 
-const blynkApi = createBlynk({ token: process.env.BLYNK_TOKEN, server: process.env.BLYNK_SERVER });
+const blynkApi = createBlynk({ token: process.env.BLYNK_TOKEN, server: process.env.BLYNK_SERVER, ttl: BLYNK_POLL_MS });
+const CACHE_S = Math.max(1, Math.round(BLYNK_POLL_MS / 1000)); // Vercel CDN cache, same length as one poll
 
 // ---------- storage (local only): memory per source + append-only JSONL ----------
 const history = { blynk: [], local: [] };
@@ -165,8 +166,8 @@ app.get('/api/config', (req, res) => res.json({
 }));
 
 if (IS_VERCEL) {
-  // Read Blynk on demand. The CDN serves this response to everyone for 3 s (then stale while it refreshes),
-  // and the module caches for 3 s too, so ten open tabs cost the same Blynk quota as one.
+  // Read Blynk on demand. The CDN serves this response to everyone for one poll interval (2 s by default),
+  // and the module caches for the same time, so ten open tabs cost the same Blynk quota as one.
   app.get('/api/latest', async (req, res) => {
     if (sourceOf(req) !== 'blynk') return res.status(400).json({ error: `Local Wi-Fi is not available here. ${LOCAL_ONLY}` });
     if (!blynkApi.configured) {
@@ -175,7 +176,7 @@ if (IS_VERCEL) {
     try {
       const snap = await blynkApi.snapshot();
       const fresh = snap.deviceOnline !== false && Object.keys(snap.readings).length > 0;
-      res.set('Cache-Control', 'public, s-maxage=3, stale-while-revalidate=10');
+      res.set('Cache-Control', `public, s-maxage=${CACHE_S}, stale-while-revalidate=${CACHE_S}`);
       res.json({
         now: Date.now(), source: 'blynk', configured: true,
         deviceOnline: snap.deviceOnline, timestamp: snap.t, readings: snap.readings,
