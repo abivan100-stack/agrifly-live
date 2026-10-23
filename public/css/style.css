@@ -378,7 +378,7 @@ a { color: inherit; }
 .focus.binary.is-on .dot { border-color: var(--on-amber); background: var(--on-amber); animation: beacon 1.6s ease-out infinite; }
 .focus.binary.is-on .range { background: color-mix(in srgb, #fff 55%, transparent); border-color: transparent; }
 .focus.binary.is-on .range button { color: var(--on-amber); }
-.focus.binary.is-on .range button[aria-pressed="true"] { background: var(--on-amber); color: var(--amber-soft); }
+.focus.binary.is-on .range button[aria-pressed="true"] { background: var(--on-amber); color: var(--amber); }
 @keyframes beacon {
   0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--on-amber) 45%, transparent); }
   100% { box-shadow: 0 0 0 16px color-mix(in srgb, var(--on-amber) 0%, transparent); }
