@@ -341,7 +341,8 @@ a { color: inherit; }
 /* number sensors: a swatch in the sensor's own colour, matching its line and sparkline */
 .focus h1::before { content: ""; width: 10px; height: 10px; border-radius: 2px; background: var(--series, var(--g500)); }
 .focus.binary h1::before { display: none; }
-.focus .range button[aria-pressed="true"] { background: var(--g700); color: #fff; }
+/* text takes the panel colour, so it stays readable when --g700 turns pale in dark mode */
+.focus .range button[aria-pressed="true"] { background: var(--g700); color: var(--surface); }
 .focus-value { font-size: clamp(2.4rem, 4.6vw, 3.6rem); font-weight: 600; line-height: 1.05; letter-spacing: -.02em; margin-top: 4px; }
 .focus-value small { font-size: 1.1rem; font-weight: 400; color: var(--muted); margin-left: 6px; letter-spacing: 0; }
 .focus-value.on { color: var(--field-strong); }
