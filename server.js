@@ -9,7 +9,10 @@ try { process.loadEnvFile(); } catch { /* no .env file: use defaults */ }
 const PORT = Number(process.env.PORT) || 3000;
 const TOKEN = process.env.AGRIFLY_TOKEN || 'change-me';
 const MAX_MEMORY = 2000;
-const DATA_FILE = process.env.DATA_FILE || path.join(__dirname, 'data', 'readings.jsonl');
+// On Vercel only /tmp is writable, and it is wiped when the instance is recycled.
+// ponytail: Vercel keeps data per instance only; add a shared store (e.g. Redis) if the hosted copy must keep history
+const DATA_FILE = process.env.DATA_FILE
+  || (process.env.VERCEL ? path.join(os.tmpdir(), 'readings.jsonl') : path.join(__dirname, 'data', 'readings.jsonl'));
 
 // ---------- storage: memory ring + append-only JSONL ----------
 let history = [];
@@ -112,7 +115,9 @@ app.get('/api/export.csv', (req, res) => {
 app.get('/dashboard', (req, res) => res.sendFile(path.join(__dirname, 'public', 'dashboard.html')));
 app.use(express.static(path.join(__dirname, 'public')));
 
-app.listen(PORT, '0.0.0.0', () => {
+module.exports = app; // Vercel imports the app instead of running it
+
+if (require.main === module) app.listen(PORT, '0.0.0.0', () => {
   const ips = Object.values(os.networkInterfaces()).flat()
     .filter((i) => i && i.family === 'IPv4' && !i.internal).map((i) => i.address);
   console.log(`\nAgriFly server running on port ${PORT}`);

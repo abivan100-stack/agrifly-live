@@ -1,0 +1,8 @@
+node_modules
+data
+.env
+firmware/**/secrets.h
+.playwright-mcp
+.env*
+!.env.example
+.vercel
