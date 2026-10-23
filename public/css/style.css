@@ -322,6 +322,49 @@ a { color: inherit; }
 .stats dt { font-size: .82rem; color: var(--muted); }
 .stats dd { margin: 0; font-size: 1.15rem; font-weight: 600; }
 
+/* live banner for on/off sensors: light while clear, filled while detected, grey when not live */
+.focus.binary .focus-head {
+  margin: -22px -26px 18px; padding: 22px 26px 20px; border-radius: 6px 6px 0 0;
+  background: var(--field-soft); border-bottom: 1px solid var(--rule); transition: background-color .3s, color .3s;
+}
+.focus.binary .stats { border-top: 0; padding-top: 0; }
+.focus.binary .focus-value { display: flex; align-items: center; gap: 16px; color: var(--ink); }
+.focus.binary .dot { flex: none; width: 18px; height: 18px; border-radius: 50%; border: 3px solid var(--muted); }
+.focus.binary.is-on .focus-head { background: var(--field-strong); border-color: var(--field-strong); }
+.focus.binary.is-on .focus-head h1,
+.focus.binary.is-on .focus-value,
+.focus.binary.is-on .focus-sub { color: var(--on-field); }
+.focus.binary.is-on .dot { border-color: var(--on-field); background: var(--on-field); animation: beacon 1.6s ease-out infinite; }
+@keyframes beacon {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--on-field) 60%, transparent); }
+  100% { box-shadow: 0 0 0 16px color-mix(in srgb, var(--on-field) 0%, transparent); }
+}
+.focus.flip .focus-head { animation: flip .6s ease-out; }
+@keyframes flip { from { filter: brightness(1.3); } to { filter: none; } }
+.focus.binary.stale .focus-head { background: var(--surface); border-color: var(--rule); }
+.focus.binary.stale .focus-head h1,
+.focus.binary.stale .focus-value,
+.focus.binary.stale .focus-sub { color: var(--muted); }
+.focus.binary.stale .dot { background: none; border-color: var(--muted); animation: none; }
+@media (prefers-reduced-motion: reduce) { .focus .dot, .focus.flip .focus-head { animation: none; } }
+
+/* chart plus, for on/off sensors, the list of recent detections beside it */
+.chart-row { display: grid; grid-template-columns: minmax(0, 1fr); gap: 28px; }
+.focus.binary .chart-row { grid-template-columns: minmax(0, 1fr) 230px; }
+.events { padding-left: 22px; border-left: 1px solid var(--rule); }
+.events ol { list-style: none; margin: 0; padding: 0; }
+.events li { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--rule); font-size: .92rem; }
+.events li:last-child { border-bottom: 0; }
+.events time { font-weight: 500; }
+.events li span { color: var(--muted); }
+.events li.now time, .events li.now span { color: var(--field-strong); font-weight: 600; }
+.events li.none { color: var(--muted); }
+@media (max-width: 999px) {
+  .focus.binary .focus-head { margin: -18px -18px 16px; padding: 18px; }
+  .focus.binary .chart-row { grid-template-columns: 1fr; }
+  .events { padding: 12px 0 0; border-left: 0; border-top: 1px solid var(--rule); }
+}
+
 .chart-title { display: flex; align-items: center; gap: 8px; font-size: .85rem; font-weight: 500; color: var(--muted); margin-bottom: 6px; }
 .chart-title .swatch { width: 12px; height: 12px; border-radius: 2px; background: var(--field-strong); }
 .strip-box { margin-bottom: 16px; }

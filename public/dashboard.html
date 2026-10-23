@@ -32,11 +32,12 @@
 
   <main class="desk-grid">
     <!-- the reading picked in the list, large, with its history -->
-    <section class="focus">
+    <section class="focus" id="focus">
+      <!-- for on/off sensors this head becomes the live banner: filled while detected, light while clear -->
       <div class="focus-head">
         <div>
           <h1 id="focus-label">Live field data</h1>
-          <div class="focus-value" id="focus-value">--</div>
+          <div class="focus-value" id="focus-value" role="status">--</div>
           <div class="focus-sub" id="focus-sub">Pick a reading on the right.</div>
         </div>
         <div class="range" role="group" aria-label="Time range">
@@ -47,12 +48,20 @@
       </div>
       <!-- summary of the chosen time range -->
       <dl class="stats" id="stats"></dl>
-      <div class="strip-box" id="strip-box" hidden>
-        <span class="chart-title"><i class="swatch" aria-hidden="true"></i><span id="strip-title">On</span></span>
-        <canvas id="strip" aria-hidden="true"></canvas>
+      <div class="chart-row">
+        <div class="chart-col">
+          <div class="strip-box" id="strip-box" hidden>
+            <span class="chart-title"><i class="swatch" aria-hidden="true"></i><span id="strip-title">On</span></span>
+            <canvas id="strip" aria-hidden="true"></canvas>
+          </div>
+          <span class="chart-title" id="chart-title" hidden></span>
+          <div class="chart-box"><canvas id="chart" aria-label="Chart of the selected reading over time"></canvas></div>
+        </div>
+        <aside class="events" id="events-box" hidden>
+          <h2 class="chart-title">Recent detections</h2>
+          <ol id="events"></ol>
+        </aside>
       </div>
-      <span class="chart-title" id="chart-title" hidden></span>
-      <div class="chart-box"><canvas id="chart" aria-label="Chart of the selected reading over time"></canvas></div>
     </section>
 
     <aside class="watch" aria-labelledby="watch-title">

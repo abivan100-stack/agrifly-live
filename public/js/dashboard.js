@@ -2,7 +2,7 @@
 // from the local source gets a card too, so a new sensor needs no code change here.
 // Two sources: Blynk Cloud (default) and Local Wi-Fi, switched with the toggle at the top.
 (() => {
-  const { prettify, format, ago } = window.AgriFly;
+  const { prettify, format, ago, duration } = window.AgriFly;
   const $ = (id) => document.getElementById(id);
   const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
@@ -205,26 +205,77 @@
     if (!cards.has(selectedKey)) selectedKey = cards.keys().next().value ?? null;
   }
 
-  // the focus panel: selected reading, large
+  // on-runs of a binary sensor, oldest first: { start, end } (end null = still on)
+  function runsOf(key) {
+    const runs = [];
+    let open = null;
+    for (const r of records) {
+      const rd = r.readings[key];
+      if (!rd) continue;
+      if (rd.value && !open) runs.push(open = { start: r.t, end: null });
+      else if (!rd.value && open) { open.end = r.t; open = null; }
+    }
+    return runs;
+  }
+
+  function renderEvents(key, runs, now) {
+    const list = runs.slice(-8).reverse().map((run) => {
+      const li = document.createElement('li');
+      if (run.end === null) li.className = 'now';
+      const time = Object.assign(document.createElement('time'), {
+        dateTime: new Date(run.start).toISOString(),
+        textContent: new Date(run.start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+      });
+      const held = document.createElement('span');
+      held.textContent = run.end === null ? `${duration(now - run.start)} so far` : duration(run.end - run.start);
+      li.append(time, held);
+      return li;
+    });
+    if (!list.length) list.push(Object.assign(document.createElement('li'), { className: 'none', textContent: `No ${stateText(key, 1).toLowerCase()} yet.` }));
+    $('events').replaceChildren(...list);
+  }
+
+  // the focus panel: selected reading, large. On/off sensors get the live banner.
+  let shownState = null;
   function updateFocus() {
     const key = selectedKey;
     const value = $('focus-value');
     if (!key) return;
+    const binary = isBinary(key);
+    $('focus').classList.toggle('binary', binary);
+    $('events-box').hidden = !binary;
     $('focus-label').textContent = meta(key).label;
     const r = records.findLast((x) => x.readings[key]);
     value.className = 'focus-value';
     if (!r) {
       value.textContent = '--';
       $('focus-sub').textContent = 'No data yet';
+      $('focus').classList.remove('is-on');
+      if (binary) renderEvents(key, [], 0);
       return;
     }
     const v = r.readings[key].value;
-    const age = `updated ${ago(serverNow() - r.t)}`;
-    if (isBinary(key)) {
-      value.textContent = stateText(key, v);
-      value.classList.add(v ? 'on' : 'off');
+    const now = serverNow();
+    const age = `updated ${ago(now - r.t)}`;
+    if (binary) {
+      const on = Boolean(v);
+      const runs = runsOf(key);
+      const lastRun = runs.at(-1);
+      // when the current state began: start of the open run, or end of the last one
+      const since = on ? lastRun.start : (lastRun?.end ?? records.find((x) => x.readings[key]).t);
+      const dot = Object.assign(document.createElement('i'), { className: 'dot' });
+      dot.setAttribute('aria-hidden', 'true');
+      value.replaceChildren(dot, stateText(key, on));
       const n = detections(key);
-      $('focus-sub').textContent = `${n} detection${n === 1 ? '' : 's'} in the last 10 min, ${age}`;
+      const focus = $('focus');
+      $('focus-sub').textContent = focus.classList.contains('stale')
+        ? `Last known state, ${age}. Not live right now.`
+        : `For ${duration(now - since)}. ${n} detection${n === 1 ? '' : 's'} in the last 10 min, ${age}.`;
+      focus.classList.toggle('is-on', on);
+      const state = `${key}:${on}`;
+      if (shownState && shownState !== state) { focus.classList.remove('flip'); void focus.offsetWidth; focus.classList.add('flip'); }
+      shownState = state;
+      renderEvents(key, runs, now);
     } else {
       const unit = Object.assign(document.createElement('small'), { textContent: r.readings[key].unit || meta(key).unit || '' });
       value.replaceChildren(format(v), unit);
@@ -483,6 +534,7 @@
     // an unreachable ESP32 is shown even when older readings are on screen
     $('empty').hidden = !(s.alert || (!hasData && s.empty));
     $('empty').textContent = s.alert || s.empty || '';
+    $('focus').classList.toggle('stale', s.cls !== 'live'); // banner greys out: last known state, not live
     updateFocus();
     const now = serverNow();
     for (const [key, c] of cards) {

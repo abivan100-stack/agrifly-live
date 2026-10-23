@@ -17,6 +17,15 @@ window.AgriFly = {
     return value.toFixed(2).replace(/\.?0+$/, '') || '0';
   },
 
+  // 12000 -> "12 s", 80000 -> "1 min 20 s", 7500000 -> "2 h 5 min"
+  duration(ms) {
+    const s = Math.max(0, Math.round(ms / 1000));
+    if (s < 60) return `${s} s`;
+    const m = Math.floor(s / 60);
+    if (m < 60) return s % 60 ? `${m} min ${s % 60} s` : `${m} min`;
+    return m % 60 ? `${Math.floor(m / 60)} h ${m % 60} min` : `${Math.floor(m / 60)} h`;
+  },
+
   ago(ms) {
     const s = Math.max(0, Math.round(ms / 1000));
     if (s < 60) return `${s}s ago`;
