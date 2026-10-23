@@ -53,9 +53,13 @@ int readIR() {
 }
 
 // ---------- Blynk (default) ----------
+void sendIP() {
+  if (Blynk.connected()) Blynk.virtualWrite(V10, WiFi.localIP().toString());   // tell website our local IP
+}
+
 BLYNK_CONNECTED() {
-  lastSentBlynk = -1;                                   // resend current value
-  Blynk.virtualWrite(V10, WiFi.localIP().toString());   // tell website our local IP
+  lastSentBlynk = -1;   // resend current value
+  sendIP();
   Serial.println("[Blynk] connected, IP sent to V10");
 }
 
@@ -126,6 +130,7 @@ void setup() {
 
   timer.setInterval(200L,   checkIR);
   timer.setInterval(10000L, checkWiFi);
+  timer.setInterval(300000L, sendIP);   // every 5 min: covers a V10 added after connect, or a new IP
 }
 
 void loop() {
