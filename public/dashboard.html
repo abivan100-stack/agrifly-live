@@ -37,31 +37,38 @@
     <div class="cards" id="cards"></div>
     <div class="empty" id="empty">No readings yet. Power on the ESP32, or run <code>npm run simulate</code> on the laptop to send test data.</div>
 
-    <section class="panel" id="chart-panel" hidden>
-      <div class="panel-head">
-        <h2>Trend</h2>
-        <div class="controls">
-          <select id="chart-key" aria-label="Reading to chart"></select>
-          <select id="chart-range" aria-label="Time range">
-            <option value="900000">Last 15 min</option>
-            <option value="3600000">Last 1 h</option>
-            <option value="0">All</option>
-          </select>
-        </div>
+    <div id="view" hidden>
+      <div class="view-bar">
+        <label for="chart-key">Showing</label>
+        <select id="chart-key"></select>
+        <select id="chart-range" aria-label="Time range">
+          <option value="900000">Last 15 min</option>
+          <option value="3600000">Last 1 h</option>
+          <option value="0">All</option>
+        </select>
       </div>
-      <div class="chart-box"><canvas id="chart"></canvas></div>
-    </section>
 
-    <section class="panel">
-      <div class="panel-head">
-        <h2>Field map</h2>
-        <span class="note" id="gps-meta"></span>
+      <div class="view-grid">
+        <section class="panel map-panel">
+          <div class="panel-head">
+            <h2>Where it was measured</h2>
+            <span class="note" id="gps-meta"></span>
+          </div>
+          <p class="note" id="no-gps">No GPS fix yet. Points appear here once the GPS module locks on, which needs open sky.</p>
+          <div id="map" hidden></div>
+          <div class="legend" id="legend" hidden>
+            <span id="legend-min"></span><span class="ramp" id="legend-ramp"></span><span id="legend-max"></span>
+          </div>
+        </section>
+
+        <section class="panel chart-panel">
+          <div class="panel-head"><h2>Over time</h2></div>
+          <div class="chart-box"><canvas id="chart"></canvas></div>
+        </section>
       </div>
-      <p class="note" id="no-gps">No GPS fix yet. Readings will appear on the map once the GPS module locks on (outdoors, clear sky).</p>
-      <div id="map" hidden></div>
-    </section>
+    </div>
 
-    <p class="dash-foot">Soil = estimated moisture (needs calibration). Gas = gas sensor level (raw ADC), not ppm.</p>
+    <p class="dash-foot">Soil is an estimated moisture level that needs calibration. Gas is the raw sensor level, not ppm.</p>
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>

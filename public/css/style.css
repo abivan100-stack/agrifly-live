@@ -35,6 +35,7 @@
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 html { scroll-behavior: smooth; }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
 body {
@@ -163,14 +164,19 @@ footer p { margin: 0; }
 .dash-head .meta { color: var(--muted); font-size: .9rem; }
 .dash-head .right { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 
-.cards { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
-.card {
-  background: var(--surface); border: 1px solid var(--line); border-top: 3px solid var(--crop);
-  border-radius: var(--radius); padding: 10px 14px 10px; cursor: pointer; text-align: left;
-  font: inherit; color: inherit;
+/* one instrument strip: cells share hairlines; negative margins tuck edge lines under the frame */
+.cards {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; background: var(--surface);
 }
-.card:hover { border-color: var(--green); border-top-color: var(--green); }
-.card[aria-pressed="true"] { border-color: var(--green); border-top-color: var(--signal); background: var(--green-soft); }
+.cards:empty { display: none; }
+.card {
+  margin: 0 -1px -1px 0; border: 0; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line);
+  border-top: 3px solid transparent; background: var(--surface);
+  padding: 10px 14px; cursor: pointer; text-align: left; font: inherit; color: inherit;
+}
+.card:hover { background: color-mix(in srgb, var(--green-soft) 50%, var(--surface)); }
+.card[aria-pressed="true"] { border-top-color: var(--signal); background: var(--green-soft); }
 .card .label { font-size: .85rem; font-stretch: 85%; color: var(--muted); font-weight: 600; }
 .card .value { font-size: 2rem; font-weight: 700; font-stretch: 105%; line-height: 1.15; letter-spacing: -.01em; }
 .card .value small { font-size: .9rem; font-weight: 500; color: var(--muted); margin-left: 3px; letter-spacing: 0; }
@@ -178,16 +184,32 @@ footer p { margin: 0; }
 .card .ago { font-size: .75rem; color: var(--muted); }
 .card.stale .value { color: var(--muted); }
 
-.panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; margin-top: 14px; }
-.panel-head { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; margin-bottom: 10px; }
-.panel-head h2 { margin: 0; font-size: 1.1rem; font-weight: 700; font-stretch: 112%; }
-.controls { display: flex; gap: 8px; flex-wrap: wrap; }
+.view-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 22px 0 12px; }
+.view-bar label { font-weight: 800; font-stretch: 112%; font-size: 1.15rem; margin-right: 2px; }
+.view-bar #chart-key { font-size: 1.05rem; font-weight: 700; padding: 7px 12px; border-color: var(--green); }
+
+.view-grid { display: grid; gap: 14px; }
+.view-grid .chart-panel { order: -1; }   /* chart first until there is a map to show */
+@media (min-width: 900px) {
+  .view-grid:has(#map:not([hidden])) { grid-template-columns: 7fr 5fr; }
+  .view-grid:has(#map:not([hidden])) .chart-panel { order: 0; }
+}
+
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; min-width: 0; }
+.panel-head { display: flex; flex-wrap: wrap; gap: 10px; align-items: baseline; justify-content: space-between; margin-bottom: 10px; }
+.panel-head h2 { margin: 0; font-size: 1rem; font-weight: 700; font-stretch: 100%; }
 select {
   font: inherit; font-size: .9rem; padding: 6px 10px; border-radius: var(--radius);
-  border: 1px solid var(--line); background: var(--bg); color: var(--text);
+  border: 1px solid var(--line); background: var(--surface); color: var(--text);
 }
-.chart-box { position: relative; height: 300px; }
-#map { height: 340px; border-radius: 4px; }
+.chart-box { position: relative; height: 360px; }
+#map { height: 360px; border-radius: 4px; }
+/* grey base map so the value colours on the points carry the meaning */
+#map .leaflet-tile-pane { filter: grayscale(1) contrast(.85) brightness(1.06); }
+@media (prefers-color-scheme: dark) { #map .leaflet-tile-pane { filter: grayscale(1) invert(.88) contrast(.85); } }
+@media (max-width: 640px) { .chart-box { height: 240px; } #map { height: 300px; } }
+.legend { display: flex; align-items: center; gap: 10px; margin-top: 10px; font-size: .85rem; color: var(--muted); }
+.legend .ramp { flex: 1; max-width: 260px; height: 10px; border-radius: 5px; box-shadow: inset 0 0 0 1px rgba(22, 33, 26, .25); }
 .note { color: var(--muted); font-size: .92rem; margin: 0; }
 .empty { padding: 30px 16px; text-align: center; color: var(--muted); border: 1px dashed var(--line); border-radius: var(--radius); }
 .dash-foot { padding: 18px 0 30px; color: var(--muted); font-size: .85rem; }

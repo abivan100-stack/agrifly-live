@@ -7,12 +7,15 @@
 
   const DEFAULT_INTERVAL_MS = 2000;
   const SPARK_POINTS = 40;
+  // map points: low -> high value of the selected reading
+  const RAMP = ['#f0e7a1', '#c6d36a', '#7fae4f', '#3c7a3a', '#1c4a2a'];
 
   let records = [];        // sorted by server time t
   let clockOffset = 0;     // server clock - this device's clock
   const cards = new Map(); // key -> { el, value, unit, spark, ago }
   let chart = null;
   let map = null, track = null, points = null, lastMarker = null;
+  let markers = [];        // { marker, r } for value colouring
   let streamOk = true;
 
   const serverNow = () => Date.now() + clockOffset;
@@ -36,8 +39,15 @@
     for (const key of Object.keys(r.readings)) updateCard(key);
     syncChartOptions();
     updateChart();
-    if (r.gps) addGps(r, true);
+    if (r.gps) { addGps(r, true); recolorMap(); }
     tick();
+  }
+
+  // One selection drives the cards, the chart and the map colours.
+  function select(key) {
+    $('chart-key').value = key;
+    updateChart();
+    recolorMap();
   }
 
   // ---------- cards ----------
@@ -48,7 +58,7 @@
     el.className = 'card';
     el.innerHTML = '<div class="label"></div><div class="value"><span></span><small></small></div><canvas></canvas><div class="ago"></div>';
     el.querySelector('.label').textContent = prettify(key);
-    el.addEventListener('click', () => { $('chart-key').value = key; updateChart(); });
+    el.addEventListener('click', () => select(key));
     const keys = [...cards.keys(), key].sort();
     const before = cards.get(keys[keys.indexOf(key) + 1]);
     $('cards').insertBefore(el, before ? before.el : null);
@@ -61,7 +71,7 @@
       lastT: 0,
     });
     $('empty').hidden = true;
-    $('chart-panel').hidden = false;
+    $('view').hidden = false;
   }
 
   function updateCard(key) {
@@ -156,7 +166,7 @@
           tooltip: { callbacks: { title: (items) => new Date(items[0].parsed.x).toLocaleTimeString() } },
         },
         scales: {
-          x: { type: 'linear', ticks: { color: text, maxTicksLimit: 7, callback(v) {
+          x: { type: 'linear', ticks: { color: text, maxTicksLimit: innerWidth < 600 ? 3 : 7, maxRotation: 0, callback(v) {
             const short = this.max - this.min < 10 * 60000; // show seconds on short spans
             return new Date(v).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: short ? '2-digit' : undefined });
           } }, grid: { color: grid } },
@@ -178,15 +188,17 @@
         maxZoom: 19,
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
       }).addTo(map);
-      track = L.polyline([], { color: '#1f5a32', weight: 3, opacity: 0.85, dashArray: '1 7', lineCap: 'round' }).addTo(map);
+      track = L.polyline([], { color: '#6b4226', weight: 2, opacity: 0.45 }).addTo(map);
       points = L.layerGroup().addTo(map);
+      $('legend-ramp').style.background = `linear-gradient(to right, ${RAMP.join(', ')})`;
     }
     track.addLatLng(ll);
     const summary = Object.entries(r.readings).map(([k, v]) => `${prettify(k)}: ${format(v.value)} ${v.unit}`).join('<br>');
-    L.circleMarker(ll, { radius: 3, color: '#6b4226', weight: 1, fillOpacity: 0.8 })
+    const marker = L.circleMarker(ll, { radius: 6, color: css('--text'), weight: 1, fillOpacity: 0.95 })
       .bindTooltip(`<b>${new Date(r.t).toLocaleTimeString()}</b><br>${summary}`)
       .addTo(points);
-    if (!lastMarker) lastMarker = L.circleMarker(ll, { radius: 8, color: '#16211a', fillColor: '#e3b23c', fillOpacity: 1, weight: 3 }).addTo(map);
+    markers.push({ marker, r });
+    if (!lastMarker) lastMarker = L.circleMarker(ll, { radius: 11, color: css('--text'), weight: 3, fill: false, interactive: false }).addTo(map);
     lastMarker.setLatLng(ll);
     if (live && !map.getBounds().pad(-0.1).contains(ll)) map.panTo(ll);
     $('gps-meta').textContent = `${r.gps.lat.toFixed(5)}, ${r.gps.lon.toFixed(5)}`;
@@ -195,10 +207,40 @@
   function rebuildMap() {
     const gpsRecords = records.filter((r) => r.gps).slice(-500);
     if (!gpsRecords.length) return;
-    if (map) { track.setLatLngs([]); points.clearLayers(); }
+    if (map) { track.setLatLngs([]); points.clearLayers(); markers = []; }
     gpsRecords.forEach((r) => addGps(r, false));
     map.invalidateSize();
     if (gpsRecords.length > 1) map.fitBounds(track.getBounds(), { padding: [30, 30], maxZoom: 18 });
+    recolorMap();
+  }
+
+  function rampColor(t) {
+    const pos = Math.min(Math.max(t, 0), 1) * (RAMP.length - 1);
+    const i = Math.min(Math.floor(pos), RAMP.length - 2);
+    const mix = (a, b) => Math.round(a + (b - a) * (pos - i));
+    const [c1, c2] = [RAMP[i], RAMP[i + 1]].map((h) => [1, 3, 5].map((j) => parseInt(h.slice(j, j + 2), 16)));
+    return `rgb(${c1.map((v, j) => mix(v, c2[j])).join(',')})`;
+  }
+
+  // Colour every GPS point by the selected reading so field zones can be compared.
+  function recolorMap() {
+    if (!map) return;
+    if (markers.length > 500) {
+      markers.splice(0, markers.length - 500).forEach((m) => points.removeLayer(m.marker));
+      track.setLatLngs(markers.map((m) => m.marker.getLatLng()));
+    }
+    const key = $('chart-key').value;
+    const values = markers.map((m) => m.r.readings[key]?.value).filter((v) => v !== undefined);
+    const min = Math.min(...values), max = Math.max(...values);
+    for (const { marker, r } of markers) {
+      const v = r.readings[key]?.value;
+      marker.setStyle({ fillColor: v === undefined ? '#9aa294' : rampColor((v - min) / (max - min || 1)) });
+    }
+    $('legend').hidden = !values.length;
+    if (!values.length) return;
+    const unit = markers.findLast((m) => m.r.readings[key])?.r.readings[key].unit || '';
+    $('legend-min').textContent = `${format(min)} ${unit}`.trim();
+    $('legend-max').textContent = `${format(max)} ${unit}`.trim();
   }
 
   // ---------- status ----------
@@ -243,7 +285,7 @@
   }
 
   // ---------- wiring ----------
-  $('chart-key').addEventListener('change', updateChart);
+  $('chart-key').addEventListener('change', () => select($('chart-key').value));
   $('chart-range').addEventListener('change', updateChart);
   setInterval(tick, 1000);
   setInterval(updateChart, 15000); // slide the time window even when no data arrives

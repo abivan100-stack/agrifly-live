@@ -1,12 +1,12 @@
 // Shared helpers for both pages.
 window.AgriFly = {
-  // "gas_raw" -> "Gas Raw", "soilMoisture" -> "Soil Moisture"
+  // "gas_raw" -> "Gas raw", "soilMoisture" -> "Soil moisture", "co2" -> "CO2"
   prettify(key) {
-    return key
-      .replace(/([a-z])([A-Z])/g, '$1 $2')
-      .replace(/[_.-]+/g, ' ')
-      .replace(/\b\w/g, (c) => c.toUpperCase())
-      .trim();
+    const ACRONYMS = { co2: 'CO2', uv: 'UV', ph: 'pH', gps: 'GPS', tvoc: 'TVOC', ndvi: 'NDVI', pm25: 'PM2.5', pm10: 'PM10' };
+    const words = key.replace(/([a-z])([A-Z])/g, '$1 $2').split(/[\s_.-]+/).filter(Boolean)
+      .map((w) => ACRONYMS[w.toLowerCase()] || w.toLowerCase());
+    if (words.length && words[0] === words[0].toLowerCase()) words[0] = words[0][0].toUpperCase() + words[0].slice(1);
+    return words.join(' ');
   },
 
   format(value) {
