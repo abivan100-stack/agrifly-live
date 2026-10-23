@@ -385,9 +385,19 @@
     }
     const kind = binary ? 'bar' : 'line';
     if (chartKind !== kind) { chart?.destroy(); chart = makeChart(kind); chartKind = kind; }
-    $('strip-box').hidden = !binary;
-    $('chart-title').hidden = !binary;
-    if (!pts.length) { renderStats([]); chart.data.datasets[0].data = []; chart.update('none'); return; }
+    $('strip-box').hidden = !binary || !pts.length;
+    $('chart-title').hidden = !binary || !pts.length;
+    const empty = $('chart-empty');
+    if (!pts.length) {
+      renderStats([]);
+      empty.textContent = 'No readings in this time range yet. They appear here as soon as the device sends data.';
+      empty.hidden = false;
+      chart.data.datasets[0].data = [];
+      Object.assign(chart.options.scales.x, { min: now - (range || 900000), max: now }); // an honest empty time axis
+      chart.update('none');
+      return;
+    }
+    empty.textContent = 'No detections in this time range yet. Wave a hand in front of the sensor to test it.';
     // don't stretch a few minutes of data across an empty 15 min / 1 h axis
     const start = pts[0].x;
     const x = chart.options.scales.x;
