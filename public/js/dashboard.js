@@ -109,7 +109,7 @@
     const have = new Set([...sel.options].map((o) => o.value));
     for (const key of [...cards.keys()].sort()) {
       if (have.has(key)) continue;
-      sel.add(new Option(prettify(key), key));
+      sel.add(new Option(prettify(key), key, false, key === 'temperature'));
     }
     // keep the dropdown alphabetical like the cards
     const sorted = [...sel.options].sort((a, b) => a.value.localeCompare(b.value));
@@ -136,25 +136,30 @@
     chart.data.datasets[0].label = `${prettify(key)}${unit ? ` (${unit})` : ''}`;
     // don't stretch a few minutes of data across an empty 15 min / 1 h axis
     chart.options.scales.x.min = range && data.length ? Math.max(from, data[0].x) : undefined;
+    chart.options.scales.x.max = data.length ? data.at(-1).x : undefined;
     chart.update('none');
   }
 
   function makeChart() {
     const text = css('--muted'), grid = css('--line'), green = css('--green');
+    Chart.defaults.font.family = css('--font');
     return new Chart($('chart'), {
       type: 'line',
-      data: { datasets: [{ data: [], borderColor: green, backgroundColor: green + '22', fill: true, pointRadius: 0, borderWidth: 2, tension: 0.25 }] },
+      data: { datasets: [{ data: [], borderColor: green, backgroundColor: green + '22', fill: true, pointRadius: 0, borderWidth: 2, cubicInterpolationMode: 'monotone' }] },
       options: {
         animation: false,
         maintainAspectRatio: false,
         parsing: false,
         interaction: { mode: 'nearest', axis: 'x', intersect: false },
         plugins: {
-          legend: { labels: { color: text, boxWidth: 12 } },
+          legend: { display: false }, // the dropdown already names the series
           tooltip: { callbacks: { title: (items) => new Date(items[0].parsed.x).toLocaleTimeString() } },
         },
         scales: {
-          x: { type: 'linear', ticks: { color: text, maxTicksLimit: 7, callback: (v) => new Date(v).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }, grid: { color: grid } },
+          x: { type: 'linear', ticks: { color: text, maxTicksLimit: 7, callback(v) {
+            const short = this.max - this.min < 10 * 60000; // show seconds on short spans
+            return new Date(v).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: short ? '2-digit' : undefined });
+          } }, grid: { color: grid } },
           y: { ticks: { color: text }, grid: { color: grid } },
         },
       },
@@ -173,15 +178,15 @@
         maxZoom: 19,
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
       }).addTo(map);
-      track = L.polyline([], { color: '#2f6b3a', weight: 3, opacity: 0.8 }).addTo(map);
+      track = L.polyline([], { color: '#1f5a32', weight: 3, opacity: 0.85, dashArray: '1 7', lineCap: 'round' }).addTo(map);
       points = L.layerGroup().addTo(map);
     }
     track.addLatLng(ll);
     const summary = Object.entries(r.readings).map(([k, v]) => `${prettify(k)}: ${format(v.value)} ${v.unit}`).join('<br>');
-    L.circleMarker(ll, { radius: 3, color: '#8a5a3b', weight: 1, fillOpacity: 0.8 })
+    L.circleMarker(ll, { radius: 3, color: '#6b4226', weight: 1, fillOpacity: 0.8 })
       .bindTooltip(`<b>${new Date(r.t).toLocaleTimeString()}</b><br>${summary}`)
       .addTo(points);
-    if (!lastMarker) lastMarker = L.circleMarker(ll, { radius: 8, color: '#2f6b3a', fillColor: '#6fbf7e', fillOpacity: 1, weight: 2 }).addTo(map);
+    if (!lastMarker) lastMarker = L.circleMarker(ll, { radius: 8, color: '#16211a', fillColor: '#e3b23c', fillOpacity: 1, weight: 3 }).addTo(map);
     lastMarker.setLatLng(ll);
     if (live && !map.getBounds().pad(-0.1).contains(ll)) map.panTo(ll);
     $('gps-meta').textContent = `${r.gps.lat.toFixed(5)}, ${r.gps.lon.toFixed(5)}`;
@@ -220,7 +225,7 @@
     }
     $('meta').textContent = !streamOk
       ? 'Connection to server lost — retrying...'
-      : r ? `Device ${r.device} · ${records.length} readings loaded` : 'No data received yet';
+      : r ? `Device ${r.device}, ${records.length} readings loaded` : 'No data received yet';
     for (const c of cards.values()) {
       if (!c.lastT) continue;
       c.ago.textContent = `updated ${ago(now - c.lastT)}`;

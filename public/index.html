@@ -6,6 +6,9 @@
   <title>AgriFly - Smarter Technology for Smarter Farming</title>
   <meta name="description" content="AgriFly is a drone-carried IoT sensor payload that streams GPS-tagged field readings to a live dashboard.">
   <link rel="icon" href="img/logo.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&display=swap">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -14,77 +17,132 @@
       <a class="brand" href="/"><img src="img/logo.svg" alt="" width="26" height="26">AgriFly</a>
       <nav>
         <a href="#how">How it works</a>
-        <a href="/dashboard">Dashboard</a>
+        <a href="/dashboard">Live data</a>
       </nav>
     </div>
   </header>
 
   <main class="wrap">
     <section class="hero">
-      <h1>AgriFly</h1>
-      <p class="tagline">Smarter Technology for Smarter Farming</p>
-      <p class="lead">An FPV drone carries an ESP32 sensor payload over the field and streams
-        GPS-tagged temperature, humidity, light, soil and air readings to a live dashboard every few seconds.</p>
-      <div class="actions">
-        <a class="btn" href="/dashboard">View live data</a>
-        <a class="btn ghost" href="#how">How it works</a>
+      <div>
+        <h1>AgriFly</h1>
+        <p class="tagline">Smarter technology for smarter farming</p>
+        <p class="lead">A drone flies over the field with a small sensor pack. Every few seconds it sends
+          temperature, humidity, light, soil and air readings, each tagged with its GPS position, to a live dashboard.</p>
+        <div class="actions">
+          <a class="btn" href="/dashboard">View live data</a>
+          <a class="btn ghost" href="#how">How it works</a>
+        </div>
       </div>
 
-      <div class="live-strip" id="live-strip" aria-live="polite">
-        <span class="pill" id="strip-status">Checking device...</span>
-      </div>
+      <figure class="field">
+        <div class="field-map" id="field-map">
+          <svg viewBox="0 0 640 460" role="img" aria-label="Top-down view of a field with the drone's survey path and live readings along it">
+            <defs>
+              <pattern id="rows-a" width="12" height="12" patternUnits="userSpaceOnUse" patternTransform="rotate(-6)">
+                <rect width="12" height="12" fill="#3c7440"/><rect width="12" height="5" fill="#2f6235"/>
+              </pattern>
+              <pattern id="rows-b" width="10" height="10" patternUnits="userSpaceOnUse" patternTransform="rotate(84)">
+                <rect width="10" height="10" fill="#8db257"/><rect width="10" height="4" fill="#7a9f48"/>
+              </pattern>
+              <pattern id="rows-c" width="9" height="9" patternUnits="userSpaceOnUse" patternTransform="rotate(28)">
+                <rect width="9" height="9" fill="#c8b25a"/><rect width="9" height="3" fill="#b59f49"/>
+              </pattern>
+              <pattern id="rows-d" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(-2)">
+                <rect width="14" height="14" fill="#7b4e2d"/><rect width="14" height="5" fill="#6a4226"/>
+              </pattern>
+            </defs>
+            <polygon points="0,0 336,0 306,214 0,236" fill="url(#rows-a)"/>
+            <polygon points="336,0 640,0 640,186 306,214" fill="url(#rows-b)"/>
+            <polygon points="0,236 306,214 286,460 0,460" fill="url(#rows-c)"/>
+            <polygon points="306,214 640,186 640,460 286,460" fill="url(#rows-d)"/>
+            <path d="M336,0 L306,214 L286,460 M0,236 L306,214 L640,186" stroke="#d8ccae" stroke-width="7" fill="none"/>
+
+            <path id="survey" d="M70,70 H570 V160 H70 V250 H570 V340 H70 V410 H570"
+                  fill="none" stroke="#f2f4ec" stroke-width="2.5" stroke-dasharray="1 9" stroke-linecap="round" stroke-linejoin="round" opacity=".9"/>
+
+            <g id="drone">
+              <g fill="none" stroke="#16211a" stroke-width="3">
+                <path d="M-9,-9 L9,9 M9,-9 L-9,9"/>
+              </g>
+              <g fill="#f2f4ec" fill-opacity=".85" stroke="#16211a" stroke-width="1.5">
+                <circle cx="-10" cy="-10" r="6"/><circle cx="10" cy="-10" r="6"/>
+                <circle cx="-10" cy="10" r="6"/><circle cx="10" cy="10" r="6"/>
+              </g>
+              <rect x="-4" y="-5" width="8" height="10" rx="2" fill="#e3b23c" stroke="#16211a" stroke-width="1.5"/>
+              <animateMotion dur="36s" repeatCount="indefinite" rotate="auto">
+                <mpath href="#survey"/>
+              </animateMotion>
+            </g>
+          </svg>
+          <!-- live reading pins, positioned on the survey path (percent of the 640x460 viewBox) -->
+          <div class="pin idle" style="left:28%;top:15.2%"><span class="tag"><b>--</b><span>waiting</span></span></div>
+          <div class="pin idle" style="left:66%;top:34.8%"><span class="tag"><b>--</b><span>waiting</span></span></div>
+          <div class="pin idle" style="left:22%;top:54.3%"><span class="tag"><b>--</b><span>waiting</span></span></div>
+          <div class="pin idle" style="left:61%;top:73.9%"><span class="tag"><b>--</b><span>waiting</span></span></div>
+        </div>
+        <figcaption aria-live="polite"><span class="dot" id="field-dot"></span><span id="field-status">Checking for the drone...</span></figcaption>
+      </figure>
     </section>
 
     <section class="section" aria-labelledby="problems-title">
-      <h2 id="problems-title">The problem &rarr; our answer</h2>
-      <div class="grid4">
+      <h2 id="problems-title">The problem, and our answer</h2>
+      <div class="problems">
         <article class="problem">
-          <h3>No real-time field intelligence</h3>
-          <p>Farmers rely on slow, manual walk-through inspections.</p>
+          <div class="issue">
+            <h3>No real-time field intelligence</h3>
+            <p>Farmers rely on slow, manual walk-through inspections.</p>
+          </div>
           <p class="answer">Live sensor readings every few seconds.</p>
         </article>
         <article class="problem">
-          <h3>Crop stress spotted late</h3>
-          <p>Dry soil, heat or humidity changes are noticed after the damage starts.</p>
+          <div class="issue">
+            <h3>Crop stress spotted late</h3>
+            <p>Dry soil, heat or humidity changes are noticed after the damage starts.</p>
+          </div>
           <p class="answer">Trends over time instead of one-off checks.</p>
         </article>
         <article class="problem">
-          <h3>Wasted water, fertilizer, labour</h3>
-          <p>Resources are used without data on actual field conditions.</p>
+          <div class="issue">
+            <h3>Water, fertilizer and labour wasted</h3>
+            <p>Resources are used without data on actual field conditions.</p>
+          </div>
           <p class="answer">Measured conditions to plan with, and less walking the field.</p>
         </article>
         <article class="problem">
-          <h3>Hard to compare field zones</h3>
-          <p>Readings aren't tied to a location, so areas blur together.</p>
-          <p class="answer">GPS-tagged readings, each with a place on the map.</p>
+          <div class="issue">
+            <h3>Hard to compare parts of a field</h3>
+            <p>Readings aren't tied to a location, so areas blur together.</p>
+          </div>
+          <p class="answer">Every reading is GPS-tagged and placed on the map.</p>
         </article>
       </div>
     </section>
 
     <section class="section" id="how" aria-labelledby="how-title">
       <h2 id="how-title">How it works</h2>
-      <div class="steps">
-        <div class="step">
-          <h3>Drone flies &amp; sensors read</h3>
+      <ol class="route">
+        <li>
+          <h3>The drone flies and the sensors read</h3>
           <p>A 5-inch FPV drone carries BME280, BH1750, soil, gas and GPS sensors.</p>
-        </div>
-        <div class="step">
-          <h3>ESP32 sends over Wi-Fi</h3>
-          <p>Every 2 s the ESP32 posts the readings and GPS position to the laptop server.</p>
-        </div>
-        <div class="step">
-          <h3>Live dashboard</h3>
-          <p>Cards, charts and a map update instantly on any laptop or phone on the network.</p>
-        </div>
-      </div>
+        </li>
+        <li>
+          <h3>The ESP32 sends over Wi-Fi</h3>
+          <p>Every 2 seconds it posts the readings and its position to the laptop server.</p>
+        </li>
+        <li>
+          <h3>The dashboard updates live</h3>
+          <p>Cards, charts and a map update on any laptop or phone on the same network.</p>
+        </li>
+      </ol>
     </section>
   </main>
 
   <footer>
     <div class="wrap">
-      <div>Team 5 &middot; Rokith Kumaar, Deepak Kumar, Adhithya &middot; 2026&ndash;27</div>
+      <p>Team 5: Rokith Kumaar, Deepak Kumar and Adhithya. Academic year 2026&ndash;27.</p>
       <div class="tags">Planned:
-        <span class="tag">NDVI</span><span class="tag">Thermal</span><span class="tag">AI analysis</span><span class="tag">Autonomous flight</span>
+        <span class="tag-planned">NDVI</span><span class="tag-planned">Thermal</span><span class="tag-planned">AI analysis</span><span class="tag-planned">Autonomous flight</span>
       </div>
     </div>
   </footer>

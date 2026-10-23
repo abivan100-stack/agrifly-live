@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>AgriFly - Live data</title>
   <link rel="icon" href="img/logo.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&display=swap">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <link rel="stylesheet" href="css/style.css">
 </head>
@@ -14,7 +17,7 @@
       <a class="brand" href="/"><img src="img/logo.svg" alt="" width="26" height="26">AgriFly</a>
       <nav>
         <a href="/">Home</a>
-        <a href="/dashboard" aria-current="page">Dashboard</a>
+        <a href="/dashboard" aria-current="page">Live data</a>
       </nav>
     </div>
   </header>
@@ -32,7 +35,7 @@
     </div>
 
     <div class="cards" id="cards"></div>
-    <div class="empty" id="empty">No readings yet. Power on the ESP32 or run <code>npm run simulate</code>.</div>
+    <div class="empty" id="empty">No readings yet. Power on the ESP32, or run <code>npm run simulate</code> on the laptop to send test data.</div>
 
     <section class="panel" id="chart-panel" hidden>
       <div class="panel-head">
