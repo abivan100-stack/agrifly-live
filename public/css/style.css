@@ -3,17 +3,20 @@
    VT323: only inside the FPV camera view, standing in for the Betaflight OSD font. */
 /* Palette: light leaf greens. Mint paper, leaf green as the main colour, fresh lime for small highlights. */
 :root {
-  --paper: #f3f9f4;        /* mint white */
+  /* team palette: #659287 sage, #88bda4 mint, #b1d3b9 pale mint, #e6f2dd mist */
+  --paper: #e6f2dd;        /* mist: page background */
   --surface: #ffffff;
-  --ink: #1c3b2f;          /* deep leaf, for text */
-  --muted: #526a5f;
-  --rule: #d2e3d7;
-  --field: #2e8a5b;        /* leaf green, dominant */
-  --field-soft: #e2f2e7;
-  --gold: #8cc63f;         /* fresh lime: highlights, focus, sliders (kept the name for existing rules) */
-  --gold-ink: #15301f;
-  --soil: #9a5a33;         /* clay, small accents */
-  --live: #23935c;
+  --ink: #1e3a33;          /* text: a deep shade of the sage */
+  --muted: #4f6a63;
+  --rule: #b1d3b9;         /* pale mint: lines and borders */
+  --field: #659287;        /* sage: brand colour, charts, selected states */
+  --field-strong: #4a786e; /* sage, darkened so white text on buttons passes WCAG AA */
+  --on-field: #ffffff;
+  --field-soft: #e6f2dd;   /* mist: hover/selected on white */
+  --gold: #88bda4;         /* mint: focus ring and small highlights (name kept for existing rules) */
+  --gold-ink: #1e3a33;
+  --soil: #9a5a33;
+  --live: #3f8f6e;
   --bad: #b23a2c;
 
   --body: "Public Sans", system-ui, sans-serif;
@@ -29,17 +32,19 @@
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --paper: #12291f;
-    --surface: #183428;
-    --ink: #e8f2ec;
-    --muted: #a6bdb1;
-    --rule: #2b4a3c;
-    --field: #6fcf97;
-    --field-soft: #1d4031;
-    --gold: #a6dc5c;
-    --gold-ink: #12291f;
+    --paper: #142521;
+    --surface: #1b302b;
+    --ink: #e6f2dd;
+    --muted: #a9c4b5;
+    --rule: #2e4a42;
+    --field: #88bda4;
+    --field-strong: #88bda4;
+    --on-field: #142521;
+    --field-soft: #22413a;
+    --gold: #b1d3b9;
+    --gold-ink: #142521;
     --soil: #e08a5a;
-    --live: #6fd6a3;
+    --live: #88bda4;
     --bad: #ef8a7b;
     color-scheme: dark;
   }
@@ -71,14 +76,14 @@ a { color: inherit; }
 /* ---------- actions ---------- */
 .btn {
   display: inline-flex; align-items: center; min-height: 44px; padding: 0 20px; border-radius: 6px;
-  background: var(--field); color: #fff; border: 1px solid var(--field);
+  background: var(--field-strong); color: var(--on-field); border: 1px solid var(--field-strong);
   font: 600 .95rem var(--body); text-decoration: none; cursor: pointer;
   transition: background-color .15s, border-color .15s, color .15s;
 }
-.btn:hover { background: #24704a; border-color: #24704a; }
+.btn:hover { background: var(--ink); border-color: var(--ink); color: var(--paper); }
 .btn.quiet { background: var(--surface); color: var(--ink); border-color: var(--rule); }
 .btn.quiet:hover { border-color: var(--muted); background: var(--surface); }
-.textlink { font-weight: 600; color: var(--field); text-decoration: none; }
+.textlink { font-weight: 600; color: var(--field-strong); text-decoration: none; }
 .textlink:hover { text-decoration: underline; text-underline-offset: 3px; }
 
 /* ---------- landing: title row ---------- */
@@ -94,7 +99,7 @@ a { color: inherit; }
 .modes button {
   font: 600 .9rem var(--body); padding: 7px 14px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); cursor: pointer;
 }
-.modes button[aria-pressed="true"] { background: var(--field-soft); color: var(--ink); }
+.modes button[aria-pressed="true"] { background: var(--rule); color: var(--ink); }
 .modes button:not([aria-pressed="true"]):hover { color: var(--ink); }
 .feed-bar .hint { color: var(--muted); font-size: .92rem; }
 
@@ -138,7 +143,7 @@ a { color: inherit; }
   font: 600 1.25rem/1 var(--body); cursor: pointer; touch-action: none; user-select: none;
 }
 .steer button:hover { border-color: var(--muted); }
-.steer button.held { background: var(--field); border-color: var(--field); color: #fff; }
+.steer button.held { background: var(--field-strong); border-color: var(--field-strong); color: var(--on-field); }
 .slider { display: flex; align-items: center; gap: 10px; color: var(--muted); }
 .slider output { min-width: 4.5ch; font-weight: 600; color: var(--ink); }
 .slider input { accent-color: var(--field); width: 130px; }
@@ -197,7 +202,7 @@ footer .planned b { color: var(--ink); font-weight: 600; }
   .compare tr { display: block; padding: 14px 16px; border-bottom: 1px solid var(--rule); }
   .compare tr:last-child { border-bottom: 0; }
   .compare td { display: block; padding: 0; border: 0; width: auto !important; }
-  .compare td:last-child { margin-top: 6px; color: var(--field); font-weight: 600; }
+  .compare td:last-child { margin-top: 6px; color: var(--field-strong); font-weight: 600; }
 }
 @media (max-width: 560px) {
   .osd { font-size: 1.2rem; padding: 12px 14px; }
@@ -219,7 +224,7 @@ footer .planned b { color: var(--ink); font-weight: 600; }
 .dash-head .right { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; justify-content: flex-end; }
 
 /* readings: one instrument row, cells split by rules, no card chrome */
-.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; overflow: hidden; }
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; overflow: hidden; }
 .cards:empty { display: none; }
 .card {
   margin: 0 -1px -1px 0; padding: 14px 16px 12px; border: 0; border-right: 1px solid var(--rule); border-bottom: 1px solid var(--rule);
@@ -271,7 +276,7 @@ select:hover { border-color: var(--muted); }
 
 /* binary sensors (e.g. IR): a big coloured state instead of a number */
 .card .state { display: inline-block; margin-top: 8px; padding: 5px 10px; border-radius: 6px; font-weight: 700; font-size: 1.15rem; line-height: 1.3; }
-.card .state.on { background: var(--field); color: #fff; }
+.card .state.on { background: var(--field-strong); color: var(--on-field); }
 .card .state.off { background: var(--paper); color: var(--muted); box-shadow: inset 0 0 0 1px var(--rule); }
 .card .detections { font-size: .8rem; color: var(--muted); }
 .empty { margin-top: 12px; }

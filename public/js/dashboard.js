@@ -9,7 +9,7 @@
   const LOCAL_OFFLINE_MS = 10000;
   const SPARK_POINTS = 40;
   const DETECTION_WINDOW_MS = 10 * 60000;
-  const RAMP = ['#f0e7a1', '#c6d36a', '#7fae4f', '#3c7a3a', '#1c4a2a']; // map points: low -> high
+  const RAMP = ['#e6f2dd', '#b1d3b9', '#88bda4', '#659287', '#3e6a60']; // map points: low -> high (team palette)
   const STORAGE_KEY = 'agrifly-source';
 
   let sensors = [];          // from /api/sensors
@@ -282,7 +282,7 @@
         maxZoom: 19,
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
       }).addTo(map);
-      track = L.polyline([], { color: '#6b4226', weight: 2, opacity: 0.45 }).addTo(map);
+      track = L.polyline([], { color: '#659287', weight: 2, opacity: 0.6 }).addTo(map);
       points = L.layerGroup().addTo(map);
       $('legend-ramp').style.background = `linear-gradient(to right, ${RAMP.join(', ')})`;
     }
