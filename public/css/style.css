@@ -25,6 +25,8 @@
   --amber-strong: #94600a;  /* amber dark enough for text on light backgrounds (AA) */
   --amber-soft: #fcefd2;
   --on-amber: #3b2604;
+  /* muted gold: thin accent lines only (never fills), so it can't be confused with "detected" amber */
+  --gold: #c9a54b;
 
   --paper: var(--mist);     /* page */
   --surface: #fbfdf9;       /* panels */
@@ -74,6 +76,7 @@
     --amber-strong: #f0b95a;
     --amber-soft: #3a2e17;
     --on-amber: #2a1b03;
+    --gold: #d6b560;
     color-scheme: dark;
   }
 }
@@ -138,7 +141,7 @@ a { color: inherit; }
 }
 .pitch .lead { color: var(--muted); font-size: 1.12rem; line-height: 1.55; max-width: 31em; }
 /* what is actually on the drone today, kept apart from the pitch */
-.pitch .testing { margin-top: 16px; padding-left: 14px; border-left: 3px solid var(--mint); font-size: .98rem; max-width: 31em; }
+.pitch .testing { margin-top: 16px; padding-left: 14px; border-left: 3px solid var(--gold); font-size: .98rem; max-width: 31em; }
 .pitch .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 30px; }
 
 /* ---------- the camera, framed like a ground-station screen ---------- */
@@ -222,7 +225,7 @@ a { color: inherit; }
   font: 500 1rem var(--body); color: var(--muted); cursor: pointer;
 }
 .tabs button:hover { color: var(--ink); }
-.tabs button[aria-selected="true"] { color: var(--ink); font-weight: 600; border-left-color: var(--sage); }
+.tabs button[aria-selected="true"] { color: var(--ink); font-weight: 600; border-left-color: var(--gold); }
 .panel { min-height: 96px; display: flex; align-items: center; }
 .panel h3, .issues dt { font-size: 1.02rem; font-weight: 600; }
 .panel p, .issues dd { color: var(--muted); font-size: .95rem; line-height: 1.45; margin: 3px 0 0; }
@@ -239,7 +242,7 @@ a { color: inherit; }
   content: ""; position: absolute; top: 0; left: 0; width: 14px; height: 14px; border-radius: 50%;
   background: var(--surface); border: 2px solid var(--sage);
 }
-.path::after { content: ""; position: absolute; top: 3px; left: 2px; width: 10px; height: 10px; border-radius: 50%; background: var(--sage-deep); opacity: 0; }
+.path::after { content: ""; position: absolute; top: 3px; left: 2px; width: 10px; height: 10px; border-radius: 50%; background: var(--gold); opacity: 0; }
 .path.pulse::after { animation: travel 1.6s ease-in-out; }
 .path.pulse li::before { animation: hit .6s ease-out; }
 .path.pulse li:nth-child(2)::before { animation-delay: .8s; }
@@ -280,7 +283,7 @@ a { color: inherit; }
   .deck { grid-template-columns: 1fr; gap: 16px; padding: 18px 20px 28px; }
   .tabs { flex-direction: row; flex-wrap: wrap; border-bottom: 1px solid var(--rule); }
   .tabs button { border-left: 0; border-bottom: 3px solid transparent; margin-bottom: -1px; }
-  .tabs button[aria-selected="true"] { border-bottom-color: var(--sage); }
+  .tabs button[aria-selected="true"] { border-bottom-color: var(--gold); }
   .issues { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px 28px; }
 }
 @media (max-width: 640px) {
@@ -308,7 +311,7 @@ a { color: inherit; }
 
 .desk-bar {
   display: grid; grid-template-columns: auto auto 1fr auto; align-items: center; gap: 12px 28px;
-  padding: 12px 28px; background: var(--station); color: var(--on-dark); border-bottom: 3px solid var(--g500);
+  padding: 12px 28px; background: var(--station); color: var(--on-dark); border-bottom: 2px solid var(--gold);
 }
 .desk-bar .modes button[aria-pressed="true"] { background: var(--g400); color: #10261f; }
 .desk-bar .brand { color: var(--on-dark); }
@@ -421,6 +424,8 @@ a { color: inherit; }
 /* side panel heads sit on a pale band */
 .watch h2, .where-head { background: var(--g50); border-bottom: 1px solid var(--g200); color: var(--g700); }
 .watch h2 { font-size: .95rem; padding: 13px 18px; }
+/* a short gold underline under the side panel titles */
+.watch h2::after, .where h2::after { content: ""; display: block; width: 22px; height: 2px; margin-top: 5px; background: var(--gold); }
 .cards { display: flex; flex-direction: column; }
 
 /* each reading is a row: name and value, a sparkline, when it last changed */
