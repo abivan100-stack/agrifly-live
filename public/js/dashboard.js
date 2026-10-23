@@ -30,6 +30,8 @@
   let pollMs = 3000;
   let pollTimer = null;
   const LOCAL_ONLY = 'Available only when running on the same network (npm start)';
+  const GAP_MS = 20000;      // readings further apart than this: no data in between (tab closed, device offline)
+  const HISTORY_KEY = 'agrifly-history-blynk'; // Vercel keeps no history, so each browser keeps its own
 
   const serverNow = () => Date.now() + clockOffset;
   const last = () => records.at(-1);
@@ -45,6 +47,7 @@
     for (const b of document.querySelectorAll('[data-source]')) b.setAttribute('aria-pressed', String(b.dataset.source === source));
     $('csv').href = `/api/export.csv?source=${source}`;
     reset();
+    if (cloud) { records = loadSaved(); rebuild(); }
     connect();
     refreshStatus();
   }
@@ -112,6 +115,23 @@
     tick();
   }
 
+  // browser-side history for Vercel, so a reload doesn't start from an empty chart
+  function loadSaved() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]');
+      return Array.isArray(saved) ? saved.filter((r) => r && typeof r.t === 'number' && r.readings).sort((a, b) => a.t - b.t) : [];
+    } catch { return []; }
+  }
+  function saveNow() {
+    if (!cloud) return;
+    try { localStorage.setItem(HISTORY_KEY, JSON.stringify(records.slice(-2000))); } catch { /* storage full or blocked */ }
+  }
+  let saveTimer = null;
+  function saveSoon() {
+    if (!cloud || saveTimer) return;
+    saveTimer = setTimeout(() => { saveTimer = null; saveNow(); }, 10000);
+  }
+
   function downloadCsv() {
     const keys = [...new Set(records.flatMap((r) => Object.keys(r.readings)))];
     const unit = (k) => records.findLast((r) => r.readings[k])?.readings[k].unit || '';
@@ -140,6 +160,7 @@
     if (last() && r.t <= last().t) return;
     records.push(r);
     if (records.length > 2200) records = records.slice(-2000);
+    saveSoon();
     Object.keys(r.readings).forEach(ensureCard);
     for (const key of Object.keys(r.readings)) updateCard(key);
     syncChartOptions();
@@ -210,18 +231,10 @@
     drawSpark(c.spark, series.reverse(), c.binary);
   }
 
-  // rising edges (0 -> 1) in the last 10 minutes
+  // detections that started in the last 10 minutes (same runs as the list and the chart)
   function detections(key) {
     const from = serverNow() - DETECTION_WINDOW_MS;
-    let prev = null, count = 0;
-    for (const r of records) {
-      const rd = r.readings[key];
-      if (!rd) continue;
-      const v = rd.value ? 1 : 0;
-      if (r.t >= from && prev === 0 && v === 1) count++;
-      prev = v;
-    }
-    return count;
+    return runsOf(key).filter((r) => r.start >= from).length;
   }
 
   function drawSpark(canvas, values, stepped) {
@@ -255,16 +268,34 @@
   }
 
   // on-runs of a binary sensor, oldest first: { start, end } (end null = still on)
+  // a gap in the data ends a run at the last reading before it
   function runsOf(key) {
     const runs = [];
-    let open = null;
+    let open = null, prevT = null;
     for (const r of records) {
       const rd = r.readings[key];
       if (!rd) continue;
+      if (open && r.t - prevT > GAP_MS) { open.end = prevT; open = null; }
       if (rd.value && !open) runs.push(open = { start: r.t, end: null });
       else if (!rd.value && open) { open.end = r.t; open = null; }
+      prevT = r.t;
     }
     return runs;
+  }
+
+  // when the current state began; observed = we saw it change (otherwise it began before our data)
+  function stateSince(key) {
+    let cur = null, since = null;
+    for (let i = records.length - 1; i >= 0; i--) {
+      const rd = records[i].readings[key];
+      if (!rd) continue;
+      const v = Boolean(rd.value);
+      if (cur === null) cur = v;
+      if (since !== null && since - records[i].t > GAP_MS) return { since, observed: false };
+      if (v !== cur) return { since, observed: true };
+      since = records[i].t;
+    }
+    return { since, observed: false };
   }
 
   function renderEvents(key, runs, now) {
@@ -276,7 +307,8 @@
         textContent: new Date(run.start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
       });
       const held = document.createElement('span');
-      held.textContent = run.end === null ? `${duration(now - run.start)} so far` : duration(run.end - run.start);
+      const ms = (run.end ?? now) - run.start;
+      held.textContent = run.end === null ? `${duration(ms)} so far` : ms < 1000 ? 'brief' : duration(ms);
       li.append(time, held);
       return li;
     });
@@ -309,9 +341,7 @@
     if (binary) {
       const on = Boolean(v);
       const runs = runsOf(key);
-      const lastRun = runs.at(-1);
-      // when the current state began: start of the open run, or end of the last one
-      const since = on ? lastRun.start : (lastRun?.end ?? records.find((x) => x.readings[key]).t);
+      const { since, observed } = stateSince(key);
       const dot = Object.assign(document.createElement('i'), { className: 'dot' });
       dot.setAttribute('aria-hidden', 'true');
       value.replaceChildren(dot, stateText(key, on));
@@ -319,7 +349,7 @@
       const focus = $('focus');
       $('focus-sub').textContent = focus.classList.contains('stale')
         ? `Last known state, ${age}. Not live right now.`
-        : `For ${duration(now - since)}. ${n} detection${n === 1 ? '' : 's'} in the last 10 min, ${age}.`;
+        : `For ${observed ? '' : 'at least '}${duration(now - since)}. ${n} detection${n === 1 ? '' : 's'} in the last 10 min, ${age}.`;
       focus.classList.toggle('is-on', on);
       const state = `${key}:${on}`;
       if (shownState && shownState !== state) { focus.classList.remove('flip'); void focus.offsetWidth; focus.classList.add('flip'); }
@@ -363,29 +393,34 @@
     const x = chart.options.scales.x;
     if (binary) {
       const end = Math.max(now, pts.at(-1).x);
+      // buckets end exactly at "now", so the newest bar and the strip both finish at the right edge
       const size = bucketSize(end - start);
-      const first = Math.floor(start / size) * size;
-      const counts = [];
-      for (let t = first; t < end || !counts.length; t += size) counts.push({ x: t + size / 2, y: 0 });
-      let prev = seed?.y ?? null, edges = 0, onMs = 0, lastHit = null;
+      const n = Math.max(1, Math.ceil((end - start) / size));
+      const first = end - n * size;
+      const counts = Array.from({ length: n }, (_, i) => ({ x: first + (i + 0.5) * size, y: 0 }));
+      const hits = runsOf(key).filter((r) => r.start >= from);
+      for (const r of hits) counts[Math.min(n - 1, Math.floor((r.start - first) / size))].y++;
+      const edges = hits.length, lastHit = hits.at(-1)?.start ?? null;
+      let onMs = 0, covered = 0;
       pts.forEach((p, i) => {
-        if (prev === 0 && p.y === 1) { counts[Math.min(counts.length - 1, Math.floor((p.x - first) / size))].y++; edges++; lastHit = p.x; }
-        if (p.y === 1) onMs += (pts[i + 1]?.x ?? end) - p.x;
-        prev = p.y;
+        const step = (pts[i + 1]?.x ?? end) - p.x;
+        if (step <= GAP_MS) { covered += step; if (p.y === 1) onMs += step; } // gaps count as unknown, not as clear
       });
       chart.data.datasets[0].data = counts;
       chart.$bucket = size;
-      x.min = first; x.max = first + counts.length * size;
+      x.min = first; x.max = end;
       $('chart-title').textContent = `Detections per ${bucketName(size)}`;
       $('strip-title').textContent = stateText(key, 1);
+      $('chart-empty').hidden = edges > 0;
       chart.update('none');
       drawStrip(pts, seed, x.min, x.max, end);
       renderStats([
         ['Detections', String(edges)],
-        ['Time detected', `${Math.round((onMs / Math.max(1, end - start)) * 100)}%`],
+        ['Time detected', covered ? `${Math.round((onMs / covered) * 100)}%` : '--'],
         ['Last detection', lastHit ? ago(now - lastHit) : 'None in range'],
       ]);
     } else {
+      $('chart-empty').hidden = true;
       chart.data.datasets[0].data = pts;
       x.min = start; x.max = pts.at(-1).x;
       chart.update('none');
@@ -421,18 +456,26 @@
     const ctx = canvas.getContext('2d');
     ctx.scale(dpr, dpr);
     const { left, right } = chart.chartArea;
-    const sx = (t) => left + ((t - min) / (max - min || 1)) * (right - left);
-    ctx.fillStyle = css('--field-soft');
-    ctx.fillRect(left, 0, sx(end) - left, h); // track stops at "now"
+    const sx = (t) => left + ((Math.max(t, min) - min) / (max - min || 1)) * (right - left);
+    const block = (from, to) => { const a = sx(from); ctx.fillRect(a, 0, Math.max(2, sx(to) - a), h); };
+    // light track only where there is data; blank where the tab was closed or the device was offline
+    ctx.fillStyle = css('--rule');
+    let segStart = seed && pts[0].x - seed.x <= GAP_MS ? min : pts[0].x;
+    pts.forEach((p, i) => {
+      const next = pts[i + 1]?.x ?? end;
+      if (next - p.x > GAP_MS) { block(segStart, p.x + 1000); segStart = pts[i + 1]?.x; }
+    });
+    if (segStart !== undefined && end - pts.at(-1).x <= GAP_MS) block(segStart, end);
+    // one solid block per "on" run, ended by an off reading or by a gap
     ctx.fillStyle = css('--field-strong');
-    // one solid block per "on" run, from the first on-sample to the next off-sample
-    let runStart = seed?.y === 1 ? min : null;
-    const fill = (to) => { const a = sx(Math.max(runStart, min)); ctx.fillRect(a, 0, Math.max(2, sx(to) - a), h); };
+    let runStart = seed?.y === 1 && pts[0].x - seed.x <= GAP_MS ? min : null, prevX = null;
     for (const p of pts) {
+      if (runStart !== null && prevX !== null && p.x - prevX > GAP_MS) { block(runStart, prevX); runStart = null; }
       if (p.y === 1 && runStart === null) runStart = p.x;
-      if (p.y === 0 && runStart !== null) { fill(p.x); runStart = null; }
+      if (p.y === 0 && runStart !== null) { block(runStart, p.x); runStart = null; }
+      prevX = p.x;
     }
-    if (runStart !== null) fill(end);
+    if (runStart !== null) block(runStart, end - prevX > GAP_MS ? prevX : end);
   }
 
   function makeChart(kind) {
@@ -628,6 +671,7 @@
 
   $('csv').addEventListener('click', (e) => { if (cloud) { e.preventDefault(); downloadCsv(); } });
   document.addEventListener('visibilitychange', () => { if (cloud && document.visibilityState === 'visible') startPolling(); });
+  window.addEventListener('pagehide', saveNow);
 
   (async () => {
     try { sensors = await (await fetch('/api/sensors')).json(); } catch { sensors = []; }

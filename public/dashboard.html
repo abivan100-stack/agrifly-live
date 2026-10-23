@@ -55,7 +55,10 @@
             <canvas id="strip" aria-hidden="true"></canvas>
           </div>
           <span class="chart-title" id="chart-title" hidden></span>
-          <div class="chart-box"><canvas id="chart" aria-label="Chart of the selected reading over time"></canvas></div>
+          <div class="chart-box">
+            <canvas id="chart" aria-label="Chart of the selected reading over time"></canvas>
+            <p class="chart-empty" id="chart-empty" hidden>No detections in this time range yet.<br>Wave a hand in front of the sensor to test it.</p>
+          </div>
         </div>
         <aside class="events" id="events-box" hidden>
           <h2 class="chart-title">Recent detections</h2>
@@ -64,6 +67,7 @@
       </div>
     </section>
 
+    <div class="side">
     <aside class="watch" aria-labelledby="watch-title">
       <h2 id="watch-title">Readings</h2>
       <div class="cards" id="cards"></div>
@@ -80,6 +84,7 @@
         <span id="legend-min"></span><span class="ramp" id="legend-ramp"></span><span id="legend-max"></span>
       </div>
     </section>
+    </div>
   </main>
 
   <p class="desk-foot" id="local-note" hidden>Local Wi-Fi is available only when running on the same network (npm start).

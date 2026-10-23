@@ -303,9 +303,11 @@ a { color: inherit; }
 .desk-grid {
   display: grid; gap: 20px; padding: 20px 28px 0;
   grid-template-columns: minmax(0, 1fr) 340px;
-  grid-template-areas: "focus watch" "where watch";
+  grid-template-areas: "focus side";
   align-items: start;
 }
+/* readings list and map share the right column, so a single sensor doesn't leave it empty */
+.side { grid-area: side; display: flex; flex-direction: column; gap: 20px; min-width: 0; }
 .focus, .watch, .where { background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; min-width: 0; }
 
 .focus { grid-area: focus; padding: 22px 26px 18px; }
@@ -317,6 +319,7 @@ a { color: inherit; }
 .focus-value.off { color: var(--muted); }
 .focus-sub { color: var(--muted); font-size: .92rem; margin-top: 6px; }
 .chart-box { position: relative; height: 300px; }
+.focus.binary .chart-box { height: 220px; } /* counts are small numbers; the strip above carries the timeline */
 
 /* range summary: low/avg/high or detections/time on/last */
 .stats { display: flex; flex-wrap: wrap; gap: 8px 40px; margin: 0 0 18px; padding: 12px 0; border-block: 1px solid var(--rule); }
@@ -372,7 +375,7 @@ a { color: inherit; }
 .strip-box { margin-bottom: 16px; }
 #strip { display: block; width: 100%; height: 22px; }
 
-.watch { grid-area: watch; padding-bottom: 6px; }
+.watch { padding-bottom: 6px; }
 .watch h2 { font-size: .95rem; padding: 16px 18px 10px; }
 .cards { display: flex; flex-direction: column; }
 
@@ -398,10 +401,14 @@ a { color: inherit; }
 .card .ago { grid-area: ago; font-size: .78rem; color: var(--muted); }
 .card.stale .value, .card.stale .state { opacity: .5; }
 
-.where { grid-area: where; padding: 18px 22px 20px; }
+.where { padding: 16px 18px 18px; }
 .where-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
 .where h2 { font-size: 1rem; }
-#map { height: 340px; border-radius: 4px; }
+#map { height: 300px; border-radius: 4px; }
+.chart-empty {
+  position: absolute; inset: 0 0 28px 40px; display: flex; flex-direction: column; justify-content: center; align-items: center;
+  margin: 0; text-align: center; color: var(--muted); font-size: .95rem; line-height: 1.5; pointer-events: none;
+}
 #map .leaflet-tile-pane { filter: grayscale(1) contrast(.85) brightness(1.06); }
 @media (prefers-color-scheme: dark) { #map .leaflet-tile-pane { filter: grayscale(1) invert(.88) contrast(.85); } }
 .legend { display: flex; align-items: center; gap: 10px; margin-top: 10px; font-size: .85rem; color: var(--muted); }
@@ -415,10 +422,15 @@ a { color: inherit; }
   .desk-bar .modes { grid-column: 1 / -1; grid-row: 2; justify-self: start; }
   .desk-status { grid-column: 1 / -1; grid-row: 3; }
   .desk-bar nav { grid-column: 2; grid-row: 1; }
-  .desk-grid { grid-template-columns: 1fr; grid-template-areas: "focus" "watch" "where"; padding: 16px 16px 0; gap: 16px; }
+  .desk-grid { grid-template-columns: 1fr; grid-template-areas: "focus" "side"; padding: 16px 16px 0; gap: 16px; }
+  .side { gap: 16px; }
   .empty { margin: 16px 16px 0; }
   .focus { padding: 18px 18px 14px; }
   .chart-box { height: 240px; }
   #map { height: 280px; }
   .desk-foot { padding: 16px 16px 28px; }
+}
+@media (max-width: 560px) {
+  .desk-bar nav { gap: 12px; }
+  .desk-bar .btn.quiet { min-height: 34px; padding: 0 12px; font-size: .88rem; }
 }
