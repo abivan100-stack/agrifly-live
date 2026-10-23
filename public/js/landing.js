@@ -224,6 +224,13 @@
       syncSliders();
       e.preventDefault();
     }
+    // W / S: climb and descend (the range input clamps to its 3-30 m limits)
+    const climb = { w: 1, W: 1, s: -1, S: -1 }[e.key];
+    if (climb) {
+      alt.value = Number(alt.value) + climb;
+      syncSliders();
+      e.preventDefault();
+    }
   });
   feed.addEventListener('keyup', (e) => { if (e.key in KEYS) fly.steer = 0; });
   feed.addEventListener('blur', () => { fly.steer = 0; });

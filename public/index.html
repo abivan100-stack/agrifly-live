@@ -48,7 +48,7 @@
 
     <!-- The pilot's view: readings shown the way Betaflight's on-screen display shows them.
          Live mode shows the real drone; demo mode lets the visitor fly over a simulated field. -->
-    <section class="feed" id="feed" tabindex="0" aria-label="Drone camera view. In demo mode use the arrow keys to steer and change speed.">
+    <section class="feed" id="feed" tabindex="0" aria-label="Drone camera view. In demo mode use the arrow keys to steer and change speed, and W and S to change altitude.">
       <div class="world" id="world" aria-hidden="true">
       <div class="ground"></div>
       <svg class="treeline" viewBox="0 0 1200 24" preserveAspectRatio="none" aria-hidden="true">
@@ -78,7 +78,7 @@
       </div>
       <label class="slider">Speed <input type="range" id="speed" min="0" max="12" step="1" value="5"><output id="speed-out">5 m/s</output></label>
       <label class="slider">Altitude <input type="range" id="alt" min="3" max="30" step="1" value="8"><output id="alt-out">8 m</output></label>
-      <span class="keys">Click the view, then <kbd>&larr;</kbd> <kbd>&rarr;</kbd> steer, <kbd>&uarr;</kbd> <kbd>&darr;</kbd> speed</span>
+      <span class="keys">Click the view, then <kbd>&larr;</kbd> <kbd>&rarr;</kbd> steer, <kbd>&uarr;</kbd> <kbd>&darr;</kbd> speed, <kbd>W</kbd> <kbd>S</kbd> altitude</span>
     </div>
     <div class="wrap feed-note">
       <span id="feed-note">Demo readings are simulated. Switch to Live drone when the drone is flying.</span>
