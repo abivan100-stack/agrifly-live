@@ -1,0 +1,256 @@
+// Live dashboard. Everything is generated from the reading keys the device sends,
+// so a new sensor in the firmware shows up here with no code change.
+(() => {
+  const { prettify, format, ago } = window.AgriFly;
+  const $ = (id) => document.getElementById(id);
+  const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
+  const DEFAULT_INTERVAL_MS = 2000;
+  const SPARK_POINTS = 40;
+
+  let records = [];        // sorted by server time t
+  let clockOffset = 0;     // server clock - this device's clock
+  const cards = new Map(); // key -> { el, value, unit, spark, ago }
+  let chart = null;
+  let map = null, track = null, points = null, lastMarker = null;
+  let streamOk = true;
+
+  const serverNow = () => Date.now() + clockOffset;
+  const last = () => records.at(-1);
+
+  // ---------- data loading ----------
+  async function loadHistory() {
+    const data = await (await fetch('/api/history?limit=2000', { cache: 'no-store' })).json();
+    clockOffset = data.now - Date.now();
+    const newestLoaded = data.readings.at(-1)?.t ?? 0;
+    // keep anything the stream delivered while the request was in flight
+    records = data.readings.concat(records.filter((r) => r.t > newestLoaded));
+    rebuild();
+  }
+
+  function onRecord(r) {
+    if (last() && r.t <= last().t) return;
+    records.push(r);
+    if (records.length > 5000) records = records.slice(-2000);
+    Object.keys(r.readings).forEach(ensureCard);
+    for (const key of Object.keys(r.readings)) updateCard(key);
+    syncChartOptions();
+    updateChart();
+    if (r.gps) addGps(r, true);
+    tick();
+  }
+
+  // ---------- cards ----------
+  function ensureCard(key) {
+    if (cards.has(key)) return;
+    const el = document.createElement('button');
+    el.type = 'button';
+    el.className = 'card';
+    el.innerHTML = '<div class="label"></div><div class="value"><span></span><small></small></div><canvas></canvas><div class="ago"></div>';
+    el.querySelector('.label').textContent = prettify(key);
+    el.addEventListener('click', () => { $('chart-key').value = key; updateChart(); });
+    const keys = [...cards.keys(), key].sort();
+    const before = cards.get(keys[keys.indexOf(key) + 1]);
+    $('cards').insertBefore(el, before ? before.el : null);
+    cards.set(key, {
+      el,
+      value: el.querySelector('.value span'),
+      unit: el.querySelector('.value small'),
+      spark: el.querySelector('canvas'),
+      ago: el.querySelector('.ago'),
+      lastT: 0,
+    });
+    $('empty').hidden = true;
+    $('chart-panel').hidden = false;
+  }
+
+  function updateCard(key) {
+    const c = cards.get(key);
+    const series = [];
+    let latest = null;
+    for (let i = records.length - 1; i >= 0 && series.length < SPARK_POINTS; i--) {
+      const rd = records[i].readings[key];
+      if (!rd) continue;
+      if (!latest) latest = { ...rd, t: records[i].t };
+      series.push(rd.value);
+    }
+    if (!latest) return;
+    c.value.textContent = format(latest.value);
+    c.unit.textContent = latest.unit;
+    c.lastT = latest.t;
+    drawSpark(c.spark, series.reverse());
+  }
+
+  function drawSpark(canvas, values) {
+    const dpr = window.devicePixelRatio || 1;
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    if (!w) return;
+    canvas.width = w * dpr; canvas.height = h * dpr;
+    const ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+    if (values.length < 2) return;
+    const min = Math.min(...values), max = Math.max(...values);
+    const span = max - min || 1;
+    ctx.beginPath();
+    values.forEach((v, i) => {
+      const x = (i / (values.length - 1)) * (w - 2) + 1;
+      const y = h - 3 - ((v - min) / span) * (h - 6);
+      i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+    });
+    ctx.strokeStyle = css('--green');
+    ctx.lineWidth = 1.6;
+    ctx.lineJoin = 'round';
+    ctx.stroke();
+  }
+
+  // ---------- main chart ----------
+  function syncChartOptions() {
+    const sel = $('chart-key');
+    const have = new Set([...sel.options].map((o) => o.value));
+    for (const key of [...cards.keys()].sort()) {
+      if (have.has(key)) continue;
+      sel.add(new Option(prettify(key), key));
+    }
+    // keep the dropdown alphabetical like the cards
+    const sorted = [...sel.options].sort((a, b) => a.value.localeCompare(b.value));
+    const current = sel.value;
+    if (sorted.some((o, i) => o !== sel.options[i])) { sorted.forEach((o) => sel.add(o)); sel.value = current; }
+  }
+
+  function updateChart() {
+    const key = $('chart-key').value;
+    if (!key || typeof Chart === 'undefined') return;
+    for (const [k, c] of cards) c.el.setAttribute('aria-pressed', String(k === key));
+    const range = Number($('chart-range').value);
+    const from = range ? serverNow() - range : 0;
+    const data = [];
+    let unit = '';
+    for (const r of records) {
+      const rd = r.readings[key];
+      if (r.t < from || !rd) continue;
+      data.push({ x: r.t, y: rd.value });
+      unit = rd.unit;
+    }
+    if (!chart) chart = makeChart();
+    chart.data.datasets[0].data = data;
+    chart.data.datasets[0].label = `${prettify(key)}${unit ? ` (${unit})` : ''}`;
+    // don't stretch a few minutes of data across an empty 15 min / 1 h axis
+    chart.options.scales.x.min = range && data.length ? Math.max(from, data[0].x) : undefined;
+    chart.update('none');
+  }
+
+  function makeChart() {
+    const text = css('--muted'), grid = css('--line'), green = css('--green');
+    return new Chart($('chart'), {
+      type: 'line',
+      data: { datasets: [{ data: [], borderColor: green, backgroundColor: green + '22', fill: true, pointRadius: 0, borderWidth: 2, tension: 0.25 }] },
+      options: {
+        animation: false,
+        maintainAspectRatio: false,
+        parsing: false,
+        interaction: { mode: 'nearest', axis: 'x', intersect: false },
+        plugins: {
+          legend: { labels: { color: text, boxWidth: 12 } },
+          tooltip: { callbacks: { title: (items) => new Date(items[0].parsed.x).toLocaleTimeString() } },
+        },
+        scales: {
+          x: { type: 'linear', ticks: { color: text, maxTicksLimit: 7, callback: (v) => new Date(v).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }, grid: { color: grid } },
+          y: { ticks: { color: text }, grid: { color: grid } },
+        },
+      },
+    });
+  }
+
+  // ---------- map ----------
+  function addGps(r, live) {
+    if (typeof L === 'undefined') return;
+    const ll = [r.gps.lat, r.gps.lon];
+    if (!map) {
+      $('no-gps').hidden = true;
+      $('map').hidden = false;
+      map = L.map('map').setView(ll, 17);
+      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+      }).addTo(map);
+      track = L.polyline([], { color: '#2f6b3a', weight: 3, opacity: 0.8 }).addTo(map);
+      points = L.layerGroup().addTo(map);
+    }
+    track.addLatLng(ll);
+    const summary = Object.entries(r.readings).map(([k, v]) => `${prettify(k)}: ${format(v.value)} ${v.unit}`).join('<br>');
+    L.circleMarker(ll, { radius: 3, color: '#8a5a3b', weight: 1, fillOpacity: 0.8 })
+      .bindTooltip(`<b>${new Date(r.t).toLocaleTimeString()}</b><br>${summary}`)
+      .addTo(points);
+    if (!lastMarker) lastMarker = L.circleMarker(ll, { radius: 8, color: '#2f6b3a', fillColor: '#6fbf7e', fillOpacity: 1, weight: 2 }).addTo(map);
+    lastMarker.setLatLng(ll);
+    if (live && !map.getBounds().pad(-0.1).contains(ll)) map.panTo(ll);
+    $('gps-meta').textContent = `${r.gps.lat.toFixed(5)}, ${r.gps.lon.toFixed(5)}`;
+  }
+
+  function rebuildMap() {
+    const gpsRecords = records.filter((r) => r.gps).slice(-500);
+    if (!gpsRecords.length) return;
+    if (map) { track.setLatLngs([]); points.clearLayers(); }
+    gpsRecords.forEach((r) => addGps(r, false));
+    map.invalidateSize();
+    if (gpsRecords.length > 1) map.fitBounds(track.getBounds(), { padding: [30, 30], maxZoom: 18 });
+  }
+
+  // ---------- status ----------
+  function expectedInterval() {
+    const recent = records.slice(-11);
+    if (recent.length < 3) return DEFAULT_INTERVAL_MS;
+    const gaps = recent.slice(1).map((r, i) => r.t - recent[i].t).sort((a, b) => a - b);
+    return Math.min(Math.max(gaps[Math.floor(gaps.length / 2)], 1000), 60000);
+  }
+
+  function tick() {
+    const pill = $('status');
+    const r = last();
+    const now = serverNow();
+    if (!r) {
+      pill.className = 'pill';
+      pill.textContent = 'Waiting for device';
+    } else if (now - r.t <= 3 * expectedInterval()) {
+      pill.className = 'pill live';
+      pill.textContent = 'Live';
+    } else {
+      pill.className = 'pill offline';
+      pill.textContent = `Offline — last data ${ago(now - r.t)}`;
+    }
+    $('meta').textContent = !streamOk
+      ? 'Connection to server lost — retrying...'
+      : r ? `Device ${r.device} · ${records.length} readings loaded` : 'No data received yet';
+    for (const c of cards.values()) {
+      if (!c.lastT) continue;
+      c.ago.textContent = `updated ${ago(now - c.lastT)}`;
+      c.el.classList.toggle('stale', now - c.lastT > 3 * expectedInterval());
+    }
+  }
+
+  function rebuild() {
+    for (const r of records) Object.keys(r.readings).forEach(ensureCard);
+    for (const key of cards.keys()) updateCard(key);
+    syncChartOptions();
+    updateChart();
+    rebuildMap();
+    tick();
+  }
+
+  // ---------- wiring ----------
+  $('chart-key').addEventListener('change', updateChart);
+  $('chart-range').addEventListener('change', updateChart);
+  setInterval(tick, 1000);
+  setInterval(updateChart, 15000); // slide the time window even when no data arrives
+  let resizeTimer;
+  window.addEventListener('resize', () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => { for (const key of cards.keys()) updateCard(key); }, 150);
+  });
+
+  // SSE reconnects by itself; each (re)connect re-syncs history so no gap is left behind.
+  const es = new EventSource('/api/stream');
+  es.onopen = () => { streamOk = true; loadHistory().catch((e) => console.error('history load failed', e)); };
+  es.onmessage = (e) => onRecord(JSON.parse(e.data));
+  es.onerror = () => { streamOk = false; tick(); };
+})();

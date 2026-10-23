@@ -1,0 +1,19 @@
+{
+  "name": "agrifly",
+  "version": "1.0.0",
+  "description": "AgriFly - live IoT field monitoring dashboard for an FPV drone sensor payload",
+  "main": "server.js",
+  "private": true,
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "simulate": "node tools/simulate.js",
+    "test": "node tools/smoke-test.js"
+  },
+  "engines": {
+    "node": ">=20.12"
+  },
+  "dependencies": {
+    "express": "^4.21.2"
+  }
+}

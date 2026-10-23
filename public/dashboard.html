@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AgriFly - Live data</title>
+  <link rel="icon" href="img/logo.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="wrap">
+      <a class="brand" href="/"><img src="img/logo.svg" alt="" width="26" height="26">AgriFly</a>
+      <nav>
+        <a href="/">Home</a>
+        <a href="/dashboard" aria-current="page">Dashboard</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <div class="dash-head">
+      <div>
+        <h1>Live field data</h1>
+        <div class="meta" id="meta">Connecting...</div>
+      </div>
+      <div class="right">
+        <span class="pill" id="status" role="status">Waiting for device</span>
+        <a class="btn ghost" href="/api/export.csv" download>Download CSV</a>
+      </div>
+    </div>
+
+    <div class="cards" id="cards"></div>
+    <div class="empty" id="empty">No readings yet. Power on the ESP32 or run <code>npm run simulate</code>.</div>
+
+    <section class="panel" id="chart-panel" hidden>
+      <div class="panel-head">
+        <h2>Trend</h2>
+        <div class="controls">
+          <select id="chart-key" aria-label="Reading to chart"></select>
+          <select id="chart-range" aria-label="Time range">
+            <option value="900000">Last 15 min</option>
+            <option value="3600000">Last 1 h</option>
+            <option value="0">All</option>
+          </select>
+        </div>
+      </div>
+      <div class="chart-box"><canvas id="chart"></canvas></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Field map</h2>
+        <span class="note" id="gps-meta"></span>
+      </div>
+      <p class="note" id="no-gps">No GPS fix yet. Readings will appear on the map once the GPS module locks on (outdoors, clear sky).</p>
+      <div id="map" hidden></div>
+    </section>
+
+    <p class="dash-foot">Soil = estimated moisture (needs calibration). Gas = gas sensor level (raw ADC), not ppm.</p>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="js/common.js"></script>
+  <script src="js/dashboard.js"></script>
+</body>
+</html>
