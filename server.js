@@ -1,7 +1,7 @@
-// AgriFly server. Two data sources feed one store:
-//   blynk - polled from Blynk Cloud's HTTPS API, only while someone is watching
-//   local - ESP32 POSTs JSON to /api/data on the same Wi-Fi
-// Browsers get live updates over Server-Sent Events.
+// AgriFly server. Two data sources feed one store, and each is polled ONLY while a dashboard watches it:
+//   blynk - read from Blynk Cloud's HTTPS API (while a source=blynk stream is open)
+//   local - read from the ESP32's own web server, GET http://<esp>/data (while a source=local stream is open)
+// Browsers get live updates over Server-Sent Events. No dashboard open = no polling at all.
 const express = require('express');
 const fs = require('fs');
 const os = require('os');
@@ -10,12 +10,15 @@ const path = require('path');
 try { process.loadEnvFile(); } catch { /* no .env file: use defaults */ }
 
 const PORT = Number(process.env.PORT) || 3000;
-const LOCAL_TOKEN = process.env.LOCAL_TOKEN || process.env.AGRIFLY_TOKEN || 'change-me';
 const BLYNK_TOKEN = (process.env.BLYNK_TOKEN || '').trim();
 const BLYNK_SERVER = (process.env.BLYNK_SERVER || 'blr1.blynk.cloud').replace(/\/+$/, '');
 // a bare host means https; a full http:// URL is allowed so tools/smoke-test.js can use a fake Blynk
 const BLYNK_BASE = /^https?:\/\//.test(BLYNK_SERVER) ? BLYNK_SERVER : `https://${BLYNK_SERVER}`;
 const BLYNK_POLL_MS = Math.max(1000, Number(process.env.BLYNK_POLL_MS) || 3000);
+const ESP_HOST = (process.env.ESP_HOST || '').trim().replace(/^https?:\/\//, '').replace(/\/+$/, '');
+const LOCAL_POLL_MS = Math.max(500, Number(process.env.LOCAL_POLL_MS) || 2000);
+const ESP_IP_PIN = 'v10';          // the ESP32 writes its local IP here on every Blynk connect
+const MDNS_HOST = 'agrifly.local';
 const SOURCES = ['blynk', 'local'];
 const MAX_MEMORY = 2000; // per source
 const SENSORS = JSON.parse(fs.readFileSync(path.join(__dirname, 'config', 'sensors.json'), 'utf8'));
@@ -33,7 +36,7 @@ if (fs.existsSync(DATA_FILE)) {
     if (!line) continue;
     try {
       const r = JSON.parse(line);
-      r.source = SOURCES.includes(r.source) ? r.source : 'local'; // records from before Blynk support were local
+      r.source = SOURCES.includes(r.source) ? r.source : 'local';
       history[r.source].push(r);
     } catch { /* skip a half-written line */ }
   }
@@ -77,19 +80,9 @@ function normalizeGps(gps) {
 const streams = { blynk: new Set(), local: new Set() };
 setInterval(() => { for (const s of SOURCES) for (const res of streams[s]) res.write(': ping\n\n'); }, 15000).unref();
 
-// ---------- Blynk poller ----------
-// Polls only while someone watches (an open blynk stream, or a /api/latest?source=blynk in the last 10 s),
-// so the Blynk monthly message quota isn't spent while nobody is looking.
-const blynk = { configured: Boolean(BLYNK_TOKEN), deviceOnline: null, lastUpdate: null, lastError: null, timer: null, delay: BLYNK_POLL_MS, polls: 0, lastWatch: 0 };
+// ---------- Blynk ----------
+const blynk = { configured: Boolean(BLYNK_TOKEN), deviceOnline: null, lastUpdate: null, lastError: null, timer: null, delay: BLYNK_POLL_MS, polls: 0 };
 const BLYNK_PINS = SENSORS.filter((s) => s.blynkPin);
-
-const watchingBlynk = () => streams.blynk.size > 0 || Date.now() - blynk.lastWatch < 10000;
-
-function ensureBlynkPolling() {
-  if (!blynk.configured || blynk.timer || !watchingBlynk() || !BLYNK_PINS.length) return;
-  console.log('Blynk: polling started (someone is watching)');
-  blynk.timer = setTimeout(pollBlynk, 0);
-}
 
 async function blynkGet(apiPath) {
   // the token is only ever in this URL; it is never logged or sent to browsers
@@ -120,9 +113,16 @@ function parseBlynkValues(text) {
   return normalizeReadings(raw);
 }
 
+function startBlynk() {
+  if (!blynk.configured || blynk.timer || !streams.blynk.size || !BLYNK_PINS.length) return;
+  console.log('Blynk: polling started (dashboard open)');
+  blynk.delay = BLYNK_POLL_MS;
+  blynk.timer = setTimeout(pollBlynk, 0);
+}
+
 async function pollBlynk() {
   blynk.timer = null;
-  if (!watchingBlynk()) { console.log('Blynk: polling paused (nobody watching)'); return; }
+  if (!streams.blynk.size) { console.log('Blynk: polling stopped (no dashboard on Blynk)'); return; }
   try {
     // isHardwareConnected every 4th poll keeps the status fresh without doubling the request count
     if (blynk.polls % 4 === 0) blynk.deviceOnline = (await blynkGet('/external/api/isHardwareConnected')).trim() === 'true';
@@ -144,34 +144,80 @@ async function pollBlynk() {
   blynk.timer = setTimeout(pollBlynk, blynk.delay);
 }
 
+// ---------- Local: pull from the ESP32's own web server ----------
+const local = { host: null, hostSource: null, reachable: null, lastUpdate: null, lastError: null, timer: null, fails: 0 };
+
+// ESP_HOST in .env wins; otherwise the IP the ESP32 published on Blynk V10; otherwise mDNS.
+async function resolveEspHost() {
+  if (ESP_HOST) return { host: ESP_HOST, hostSource: 'env' };
+  if (blynk.configured) {
+    try {
+      const text = (await blynkGet(`/external/api/get?${ESP_IP_PIN}`)).trim();
+      let ip = text;
+      try { const parsed = JSON.parse(text); ip = Array.isArray(parsed) ? parsed[0] : parsed; } catch { /* raw string */ }
+      ip = String(ip ?? '').trim();
+      if (/^[\w.-]+(:\d+)?$/.test(ip) && ip !== '0') return { host: ip, hostSource: 'blynk' };
+      console.warn(`Local: Blynk ${ESP_IP_PIN.toUpperCase()} has no usable address ("${ip.slice(0, 40)}"), trying ${MDNS_HOST}`);
+    } catch (err) {
+      console.warn(`Local: could not read the ESP32 address from Blynk (${err.message}), trying ${MDNS_HOST}`);
+    }
+  }
+  return { host: MDNS_HOST, hostSource: 'mdns' };
+}
+
+async function useHost() {
+  const found = await resolveEspHost();
+  if (found.host !== local.host) console.log(`Local: using ESP32 at ${found.host} (${found.hostSource})`);
+  Object.assign(local, found);
+}
+
+function startLocal() {
+  if (local.timer || !streams.local.size) return;
+  console.log('Local: polling started (dashboard open)');
+  local.fails = 0;
+  local.timer = setTimeout(async () => { await useHost(); pollLocal(); }, 0);
+}
+
+async function pollLocal() {
+  local.timer = null;
+  if (!streams.local.size) { console.log('Local: polling stopped (no dashboard on Local Wi-Fi)'); return; }
+  try {
+    const res = await fetch(`http://${local.host}/data`, { signal: AbortSignal.timeout(1500) });
+    if (!res.ok) throw new Error(`ESP32 answered HTTP ${res.status}`);
+    const body = await res.json();
+    const readings = normalizeReadings(body.readings);
+    if (!Object.keys(readings).length) throw new Error('ESP32 sent no readings');
+    if (local.reachable === false) console.log(`Local: ESP32 at ${local.host} reachable again`);
+    Object.assign(local, { reachable: true, lastError: null, fails: 0 });
+    local.lastUpdate = store('local', { device: String(body.device || 'esp32').slice(0, 40), readings, gps: normalizeGps(body.gps) }).t;
+  } catch (err) {
+    local.reachable = false;
+    local.fails++;
+    local.lastError = err.name === 'TimeoutError' ? `no answer from ${local.host} within 1.5 s`
+      : err.cause?.code ? `${err.cause.code} for ${local.host}` : err.message;
+    if (local.fails === 1 || local.fails % 10 === 0) console.warn(`Local: ${local.lastError}`);
+    // the ESP32 may have a new IP: re-read Blynk V10 after every 3 failures
+    if (local.fails % 3 === 0 && local.hostSource !== 'env') await useHost();
+  }
+  local.timer = setTimeout(pollLocal, LOCAL_POLL_MS);
+}
+
 // ---------- app ----------
 const app = express();
-app.use(express.json({ limit: '16kb' }));
-
 const sourceOf = (req) => (SOURCES.includes(req.query.source) ? req.query.source : 'blynk');
-
-app.post('/api/data', (req, res) => {
-  const body = req.body || {};
-  if (body.token !== LOCAL_TOKEN) return res.status(401).json({ ok: false, error: 'bad token' });
-  const readings = normalizeReadings(body.readings);
-  if (!Object.keys(readings).length) return res.status(400).json({ ok: false, error: 'no numeric readings' });
-  store('local', { device: String(body.device || 'unknown').slice(0, 40), readings, gps: normalizeGps(body.gps) });
-  res.json({ ok: true });
-});
 
 app.get('/api/stream', (req, res) => {
   const source = sourceOf(req);
   res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' });
   res.write('retry: 3000\n\n');
   streams[source].add(res);
-  if (source === 'blynk') ensureBlynkPolling();
-  req.on('close', () => streams[source].delete(res));
+  if (source === 'blynk') startBlynk(); else startLocal();
+  req.on('close', () => streams[source].delete(res)); // the poller sees the empty set on its next tick and stops
 });
 
 // `now` lets browsers correct for their own clock being off from the server's.
 app.get('/api/latest', (req, res) => {
   const source = sourceOf(req);
-  if (source === 'blynk') { blynk.lastWatch = Date.now(); ensureBlynkPolling(); }
   res.json({ now: Date.now(), source, latest: history[source].at(-1) || null });
 });
 
@@ -190,7 +236,14 @@ app.get('/api/status', (req, res) => res.json({
     lastError: blynk.lastError,
     polling: Boolean(blynk.timer),
   },
-  local: { lastUpdate: history.local.at(-1)?.t ?? null },
+  local: {
+    host: local.host,
+    hostSource: local.hostSource,
+    reachable: local.reachable,
+    lastUpdate: local.lastUpdate ?? history.local.at(-1)?.t ?? null,
+    lastError: local.lastError,
+    polling: Boolean(local.timer),
+  },
 }));
 
 app.get('/api/sensors', (req, res) => res.json(SENSORS.map(({ key, label, unit, type, onText, offText }) => ({ key, label, unit, type, onText, offText }))));
@@ -220,14 +273,11 @@ if (require.main === module) app.listen(PORT, '0.0.0.0', () => {
   const ips = Object.values(os.networkInterfaces()).flat()
     .filter((i) => i && i.family === 'IPv4' && !i.internal).map((i) => i.address);
   console.log(`\nAgriFly server running on port ${PORT}`);
-  for (const ip of ips.length ? ips : ['localhost']) {
-    console.log(`\n  ESP32 LOCAL_URL = http://${ip}:${PORT}/api/data`);
-    console.log(`  Dashboard:       http://${ip}:${PORT}/dashboard`);
-  }
-  console.log(`\n  On this laptop:  http://localhost:${PORT}`);
+  for (const ip of ips.length ? ips : ['localhost']) console.log(`  Dashboard:      http://${ip}:${PORT}/dashboard`);
+  console.log(`  On this laptop: http://localhost:${PORT}`);
   console.log(blynk.configured
-    ? `  Blynk Cloud:     token configured (${BLYNK_SERVER}), polling every ${BLYNK_POLL_MS / 1000} s while a dashboard is open`
-    : '  Blynk Cloud:     NOT configured - add BLYNK_TOKEN to .env to read data from Blynk');
-  if (LOCAL_TOKEN === 'change-me') console.log('  Local token:     default "change-me" (set LOCAL_TOKEN in .env to change it)');
+    ? `  Blynk Cloud:    token configured (${BLYNK_SERVER}), polled every ${BLYNK_POLL_MS / 1000} s while a dashboard shows Blynk`
+    : '  Blynk Cloud:    NOT configured - add BLYNK_TOKEN to .env to read data from Blynk');
+  console.log(`  Local Wi-Fi:    ESP32 address from ${ESP_HOST ? `ESP_HOST (${ESP_HOST})` : blynk.configured ? `Blynk ${ESP_IP_PIN.toUpperCase()}, else ${MDNS_HOST}` : MDNS_HOST}, polled every ${LOCAL_POLL_MS / 1000} s while a dashboard shows Local Wi-Fi`);
   console.log('');
 });

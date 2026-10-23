@@ -11,8 +11,3 @@
 // 2.4 GHz Wi-Fi only (the ESP32 cannot join 5 GHz networks)
 #define WIFI_SSID      "YOUR_WIFI_NAME"
 #define WIFI_PASSWORD  "YOUR_WIFI_PASSWORD"
-
-// Local Wi-Fi mode: the laptop running `npm start`. Copy the "ESP32 LOCAL_URL" line it prints.
-// Leave LOCAL_URL empty ("") to send to Blynk only.
-#define LOCAL_URL      "http://192.168.1.100:3000/api/data"
-#define LOCAL_TOKEN    "change-me"   // must match LOCAL_TOKEN in the server's .env

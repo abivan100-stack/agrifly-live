@@ -341,13 +341,19 @@
   // ---------- status ----------
   function sourceState() {
     const now = serverNow();
-    const lastT = source === 'blynk' ? (status?.blynk.lastUpdate ?? last()?.t) : (status?.local.lastUpdate ?? last()?.t);
+    // newest of the status poll and the stream, so "Xs ago" doesn't lag behind the cards
+    const lastT = Math.max(status?.[source]?.lastUpdate ?? 0, last()?.t ?? 0) || null;
     const since = lastT ? `Last update ${ago(now - lastT)}` : 'No data received yet';
     if (!streamOk) return { cls: 'offline', text: 'Server unreachable', note: 'Connection to the AgriFly server lost. Retrying...' };
     if (source === 'local') {
-      if (!lastT) return { cls: '', text: 'Waiting for device', note: since, empty: 'No readings yet. Set LOCAL_URL in the ESP32 sketch to this server, or run npm run simulate on the laptop to send test data.' };
-      if (now - lastT > LOCAL_OFFLINE_MS) return { cls: 'offline', text: 'Device offline', note: since };
-      return { cls: 'live', text: 'Live', note: since };
+      const l = status?.local;
+      const FROM = { env: 'from ESP_HOST', blynk: 'from Blynk', mdns: 'via mDNS' };
+      const where = l?.host ? `${l.host} · ${FROM[l.hostSource] || ''}` : 'Looking for the ESP32...';
+      const unreachable = 'ESP32 not reachable on this network — make sure this laptop and the ESP32 are on the same Wi-Fi.';
+      if (l?.reachable === false) return { cls: 'offline', text: 'Not reachable', note: `${where}. ${l.lastError || ''}`.trim(), empty: unreachable, alert: unreachable };
+      if (!lastT) return { cls: '', text: 'Waiting for device', note: where, empty: 'Asking the ESP32 for its first reading...' };
+      if (now - lastT > LOCAL_OFFLINE_MS) return { cls: 'offline', text: 'Device offline', note: `${where}. ${since}` };
+      return { cls: 'live', text: 'Live', note: `${where}. ${since}` };
     }
     const b = status?.blynk;
     if (!b) return { cls: '', text: 'Checking...', note: since };
@@ -364,8 +370,9 @@
     $('status').textContent = s.text;
     $('meta').textContent = s.note;
     const hasData = records.length > 0;
-    $('empty').hidden = hasData || !s.empty;
-    $('empty').textContent = s.empty || '';
+    // an unreachable ESP32 is shown even when older readings are on screen
+    $('empty').hidden = !(s.alert || (!hasData && s.empty));
+    $('empty').textContent = s.alert || s.empty || '';
     $('view').hidden = !hasData;
     const now = serverNow();
     for (const [key, c] of cards) {

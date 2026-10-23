@@ -1,130 +1,135 @@
 /*
   AgriFly ESP32 sensor payload
-  Sends readings two ways at the same time:
-    1. Blynk Cloud (virtual pins) - works from any network; the AgriFly server reads them from Blynk.
-    2. Local Wi-Fi - POSTs JSON to the AgriFly laptop server every 2 s (same network only).
+    Blynk (default): writes V0 = IR sensor (0/1) on change, and V10 = this board's local IP on every connect.
+    Local Wi-Fi:     serves GET http://<this-ip>/data (also http://agrifly.local/data via mDNS).
+                     It only answers when asked; the AgriFly server polls it while a dashboard shows "Local Wi-Fi".
 
   Board: "ESP32 Dev Module" (Boards Manager: "esp32" by Espressif Systems)
-  Library: "Blynk" by Volodymyr Shymanskyy (Library Manager). WiFi and HTTPClient come with the ESP32 core.
+  Library: "Blynk" by Volodymyr Shymanskyy. WiFi, WebServer and ESPmDNS come with the ESP32 core.
 
-  Setup: copy secrets.example.h to secrets.h and fill in the Blynk IDs/token, Wi-Fi and LOCAL_URL.
+  Setup: copy secrets.example.h to secrets.h and fill in the Blynk IDs/token and Wi-Fi.
+  Blynk datastreams: V0 integer 0-1 (IR), V10 string (ESP IP).
 
   Wiring (testing now):
-    IR obstacle sensor: VCC -> 3V3, GND -> GND, OUT -> GPIO 27 (change IR_PIN below if yours differs)
-    Most IR modules pull OUT LOW when an object is in front (IR_ACTIVE_LOW = true).
+    IR obstacle sensor: VCC -> 3V3, GND -> GND, OUT -> GPIO 27
+    Most IR modules pull OUT LOW when an object is in front.
 
   How to add a sensor (example: temperature on V1):
     1. Blynk console: add a datastream, Virtual Pin V1, type Double.
-    2. Here, in sendReadings(): read it, then add ONE line for each destination:
+    2. Here: read it, send it to Blynk (like V0 in checkIR()), and add it to the JSON in handleData():
          Blynk.virtualWrite(V1, temperature);
-         addLocal(json, "temperature", temperature, "°C");
+         ...\"temperature\":{\"value\":<temperature>,\"unit\":\"°C\"}...
     3. config/sensors.json on the server: add
          { "key": "temperature", "blynkPin": "v1", "label": "Temperature", "unit": "°C", "type": "number" }
     The dashboard shows the new card by itself; no website code changes.
 */
 
-#include "secrets.h"        // must come before BlynkSimpleEsp32.h (it defines the BLYNK_TEMPLATE_* values)
+// ===================== CONFIG =====================
+#include "secrets.h"        // Blynk template ID/name/token, BLYNK_SERVER, Wi-Fi (gitignored)
 #define BLYNK_PRINT Serial
+
+char ssid[] = WIFI_SSID;      // 2.4 GHz
+char pass[] = WIFI_PASSWORD;
+
+const char* DEVICE_ID = "agrifly-01";
+const int IR_PIN = 27;
+// ==================================================
+
 #include <WiFi.h>
-#include <HTTPClient.h>
+#include <WiFiClient.h>
+#include <WebServer.h>
+#include <ESPmDNS.h>
 #include <BlynkSimpleEsp32.h>
 
-// ---------- settings ----------
-const char*    DEVICE_ID          = "agrifly-01";
-const int      IR_PIN             = 27;
-const bool     IR_ACTIVE_LOW      = true;
-const uint32_t READ_INTERVAL_MS   = 200;     // how often the IR pin is checked
-const uint32_t BLYNK_REFRESH_MS   = 10000;   // resend to Blynk at least this often (changes are sent at once)
-const uint32_t LOCAL_INTERVAL_MS  = 2000;
-const uint32_t WIFI_RETRY_MS      = 10000;
-
 BlynkTimer timer;
-int  irValue = -1;          // -1 = not read yet
-bool wasConnected = false;
-uint32_t lastBlynkSend = 0, lastWifiTry = 0;
+WebServer localServer(80);   // only answers when the website asks (Local Wi-Fi mode)
 
-int readIr() {
-  int level = digitalRead(IR_PIN);
-  return IR_ACTIVE_LOW ? (level == LOW) : (level == HIGH);
+int irState = -1;
+int lastSentBlynk = -1;
+bool mdnsStarted = false;
+
+int readIR() {
+  return (digitalRead(IR_PIN) == LOW) ? 1 : 0;   // most IR modules go LOW on detect
 }
 
-// ---------- local Wi-Fi: build {"readings":{...}} one sensor at a time ----------
-void addLocal(String& json, const char* key, float value, const char* unit) {
-  if (isnan(value)) return;                 // skip a failed reading instead of sending 0
-  if (!json.endsWith("{")) json += ",";
-  json += "\""; json += key; json += "\":{\"value\":"; json += String(value, 2);
-  json += ",\"unit\":\""; json += unit; json += "\"}";
+// ---------- Blynk (default) ----------
+BLYNK_CONNECTED() {
+  lastSentBlynk = -1;                                   // resend current value
+  Blynk.virtualWrite(V10, WiFi.localIP().toString());   // tell website our local IP
+  Serial.println("[Blynk] connected, IP sent to V10");
 }
 
-void postLocal() {
-  if (strlen(LOCAL_URL) == 0 || WiFi.status() != WL_CONNECTED || irValue < 0) return;
-  String json = "{\"device\":\""; json += DEVICE_ID;
-  json += "\",\"token\":\""; json += LOCAL_TOKEN;
-  json += "\",\"readings\":{";
-  addLocal(json, "ir", irValue, "");
-  // addLocal(json, "temperature", temperature, "°C");   <- new sensors go here
-  json += "}}";
-
-  HTTPClient http;
-  http.setTimeout(1500);                    // short, so Blynk keeps running if the laptop is unreachable
-  http.begin(LOCAL_URL);
-  http.addHeader("Content-Type", "application/json");
-  int code = http.POST(json);
-  if (code != 200) Serial.printf("Local POST %d %s\n", code, code < 0 ? http.errorToString(code).c_str() : "");
-  http.end();
-}
-
-// ---------- Blynk ----------
-void sendBlynk() {
-  if (!Blynk.connected() || irValue < 0) return;
-  Blynk.virtualWrite(V0, irValue);
-  // Blynk.virtualWrite(V1, temperature);                 <- new sensors go here
-  lastBlynkSend = millis();
-}
-
-void checkIr() {
-  int v = readIr();
-  bool changed = v != irValue;
-  irValue = v;
-  if (changed) {
-    Serial.printf("IR: %s\n", irValue ? "object detected" : "clear");
-    sendBlynk();                            // changes go out immediately
-  } else if (millis() - lastBlynkSend >= BLYNK_REFRESH_MS) {
-    sendBlynk();                            // otherwise a slow refresh, to save Blynk message quota
+void checkIR() {
+  irState = readIR();
+  if (irState != lastSentBlynk && Blynk.connected()) {
+    Blynk.virtualWrite(V0, irState);                    // only on change: saves quota
+    lastSentBlynk = irState;
+    Serial.printf("[Blynk] V0 = %d\n", irState);
   }
 }
 
-// ---------- Wi-Fi without blocking ----------
-void handleWifi() {
-  bool connected = WiFi.status() == WL_CONNECTED;
-  if (connected && !wasConnected) { Serial.print("Wi-Fi connected, IP "); Serial.println(WiFi.localIP()); }
-  if (!connected && wasConnected) Serial.println("Wi-Fi lost, reconnecting...");
-  wasConnected = connected;
-  if (!connected && millis() - lastWifiTry >= WIFI_RETRY_MS) {
-    lastWifiTry = millis();
-    WiFi.disconnect();
-    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+// ---------- Local Wi-Fi (on request only) ----------
+void handleData() {
+  String json = String("{\"device\":\"") + DEVICE_ID +
+                "\",\"readings\":{\"ir\":{\"value\":" + irState +
+                ",\"unit\":\"\"}},\"uptime\":" + (millis() / 1000) + "}";
+  localServer.sendHeader("Access-Control-Allow-Origin", "*");
+  localServer.send(200, "application/json", json);
+}
+
+void handleRoot() {
+  localServer.send(200, "text/plain", "AgriFly ESP32 is running. Data at /data");
+}
+
+void startMDNS() {
+  if (!mdnsStarted && WiFi.status() == WL_CONNECTED && MDNS.begin("agrifly")) {
+    MDNS.addService("http", "tcp", 80);
+    mdnsStarted = true;
+    Serial.println("[Local] reachable at http://agrifly.local/data");
+  }
+}
+
+void checkWiFi() {
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("[WiFi] lost, reconnecting...");
+    WiFi.reconnect();
+  } else {
+    startMDNS();
   }
 }
 
 void setup() {
   Serial.begin(115200);
-  delay(200);
-  Serial.println("\nAgriFly ESP32 starting");
   pinMode(IR_PIN, INPUT);
 
   WiFi.mode(WIFI_STA);
-  WiFi.setAutoReconnect(true);
-  lastWifiTry = millis();
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);     // don't wait here; loop() keeps reading sensors without Wi-Fi
-  Blynk.config(BLYNK_AUTH_TOKEN, BLYNK_SERVER, 80);
+  WiFi.begin(ssid, pass);
+  Serial.print("[WiFi] connecting");
+  unsigned long start = millis();
+  while (WiFi.status() != WL_CONNECTED && millis() - start < 20000) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println();
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.print("[WiFi] connected, ESP32 IP: ");
+    Serial.println(WiFi.localIP());
+    startMDNS();
+  }
 
-  timer.setInterval(READ_INTERVAL_MS, checkIr);
-  timer.setInterval(LOCAL_INTERVAL_MS, postLocal);
+  localServer.on("/", handleRoot);
+  localServer.on("/data", handleData);
+  localServer.begin();
+
+  Blynk.config(BLYNK_AUTH_TOKEN, BLYNK_SERVER, 80);
+  Blynk.connect(5000);
+
+  timer.setInterval(200L,   checkIR);
+  timer.setInterval(10000L, checkWiFi);
 }
 
 void loop() {
-  handleWifi();
-  if (WiFi.status() == WL_CONNECTED) Blynk.run();   // connects to Blynk by itself once Wi-Fi is up
+  if (WiFi.status() == WL_CONNECTED) Blynk.run();
+  localServer.handleClient();
   timer.run();
 }

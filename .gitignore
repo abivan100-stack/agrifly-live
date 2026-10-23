@@ -12,3 +12,6 @@ Thumbs.db
 .env*
 !.env.example
 *.docx
+
+# local working copies of sketches that still contain real credentials
+Esp code/

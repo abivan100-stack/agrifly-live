@@ -7,18 +7,17 @@ live dashboard. Right now we are testing with **one IR obstacle sensor** (1 = ob
 Planned next: BME280 (temperature, humidity, pressure), BH1750 (light), soil moisture (estimated %),
 MQ gas sensor (raw level) and NEO-6M GPS.
 
-The ESP32 sends data two ways at the same time:
+The dashboard can read the ESP32 two ways:
 
 ```
-                    Blynk virtual pins                    HTTPS API (polled only while someone watches)
-ESP32 ──────────────────────────────────► Blynk Cloud ◄───────────────────────────┐
-  │                                                                                │
-  │  Local Wi-Fi: HTTP POST JSON every 2 s (same network only)                  Node server (port 3000)
-  └───────────────────────────────────────────────────────────────────────────►   one store, two sources
-                                                                                   │ Server-Sent Events
-                                          Browser: dashboard with [Blynk Cloud | Local Wi-Fi] toggle
+ESP32 ── writes V0 (IR) and V10 (its IP) ──► Blynk Cloud ◄── HTTPS, while a dashboard shows "Blynk Cloud" ──┐
+  │                                                                                                         │
+  └── serves GET http://<esp-ip>/data ◄──────────── HTTP, while a dashboard shows "Local Wi-Fi" ──── Node server (port 3000)
+                                                                                                            │ Server-Sent Events
+                                                         Browser: dashboard with [Blynk Cloud | Local Wi-Fi] toggle
 ```
 
+The server only polls a source while a dashboard is showing it. No dashboard open = no polling at all.
 No database, no build step. The Blynk token stays on the server; the browser never sees it.
 
 > **Security note for the team:** the original project slides contain a real Wi-Fi password and a ThingSpeak
@@ -42,53 +41,70 @@ Device Info). Do this yourself; don't paste the token into chats or commit it.
 npm start
 ```
 
-The server prints what you need:
+Open the dashboard on this laptop (<http://localhost:3000/dashboard>) or on any phone on the same Wi-Fi using
+the `Dashboard:` address that `npm start` prints.
 
+### Test Local mode without hardware
+
+```bash
+npm run simulate -- --all     # fake ESP32 at http://localhost:8080/data (IR + temperature, humidity, soil, light, GPS)
 ```
-  ESP32 LOCAL_URL = http://192.168.1.23:3000/api/data
-  Dashboard:       http://192.168.1.23:3000/dashboard
-  Blynk Cloud:     token configured (blr1.blynk.cloud), polling every 3 s while a dashboard is open
-```
 
-Open the dashboard on this laptop (<http://localhost:3000/dashboard>) or on any phone on the same Wi-Fi.
+Put `ESP_HOST=localhost:8080` in `.env`, restart `npm start`, and choose **Local Wi-Fi** on the dashboard.
+New sensor cards appear by themselves. `npm run simulate` without `--all` serves the IR sensor only.
+`npm test` runs a self-check against a fake Blynk server and a fake ESP32.
 
-No hardware? `npm run simulate` sends fake IR data to the Local Wi-Fi source, and `npm run simulate -- --all`
-adds temperature, humidity, soil, light and a moving GPS point, so you can watch new cards appear by themselves.
-`npm test` runs a quick self-check against a fake Blynk server.
+## Blynk setup
+
+In the Blynk console, the template needs two datastreams:
+
+| Virtual pin | Name | Type | Used for |
+|---|---|---|---|
+| V0 | IR | Integer, 0-1 | the IR sensor reading |
+| V10 | ESP IP | String | the ESP32's local IP, written on every connect, so Local mode can find it |
 
 ## Dashboard sources
 
 The toggle at the top switches between:
 
-- **Blynk Cloud** (default): works from any network. The server reads the ESP32's Blynk virtual pins every
-  3 s (`BLYNK_POLL_MS`), but **only while a dashboard is open**, to save your Blynk monthly message quota.
-  The status comes from Blynk's "is the device connected" check.
-- **Local Wi-Fi**: the ESP32 posts directly to the laptop. Needs the ESP32 and laptop on the same network.
-  Shows "Device offline" after 10 s without data.
+- **Blynk Cloud** (default): works from any network. The server reads Blynk every 3 s (`BLYNK_POLL_MS`) while a
+  dashboard shows Blynk. Status comes from Blynk's "is the device connected" check.
+- **Local Wi-Fi**: the server asks the ESP32 directly for `GET http://<esp>/data` every 2 s (`LOCAL_POLL_MS`).
+  The server and the ESP32 must be on the same network. The dashboard shows which address it uses and where it
+  came from.
 
-The dashboard remembers your choice. **Download CSV** exports the selected source.
+Switching closes the old stream, so the other source stops being polled. The dashboard remembers your choice.
+**Download CSV** exports the selected source.
+
+### How Local mode finds the ESP32
+
+No IP needs typing anywhere. The server tries, in order:
+
+1. `ESP_HOST` in `.env`, if you set it (manual override, e.g. `192.168.1.25`)
+2. Blynk pin **V10**, where the ESP32 publishes its IP each time it connects to Blynk. Read when Local mode starts,
+   and again after 3 failed requests in a row (in case the ESP32 got a new IP).
+3. `agrifly.local` (mDNS)
 
 ## Flash the ESP32 (Arduino IDE)
 
 1. **Boards Manager:** install "esp32" by Espressif Systems. Select board **ESP32 Dev Module**.
 2. **Library Manager:** install **Blynk** (by Volodymyr Shymanskyy).
-3. Copy `firmware/agrifly_esp32/secrets.example.h` to `secrets.h` in the same folder and fill in:
-   - `BLYNK_TEMPLATE_ID`, `BLYNK_TEMPLATE_NAME`, `BLYNK_AUTH_TOKEN` from the Blynk console
-   - `WIFI_SSID`, `WIFI_PASSWORD` (2.4 GHz network)
-   - `LOCAL_URL`: copy the `ESP32 LOCAL_URL = ...` line printed by `npm start` (or `""` for Blynk only)
-   - `LOCAL_TOKEN`: same as `LOCAL_TOKEN` in `.env` (default `change-me`)
+3. Copy `firmware/agrifly_esp32/secrets.example.h` to `secrets.h` in the same folder and fill in
+   `BLYNK_TEMPLATE_ID`, `BLYNK_TEMPLATE_NAME`, `BLYNK_AUTH_TOKEN` (Blynk console) and `WIFI_SSID`,
+   `WIFI_PASSWORD` (a 2.4 GHz network).
 4. Check `IR_PIN` in `agrifly_esp32.ino` matches your wiring (default GPIO 27).
-5. Upload, then open Serial Monitor at 115200 baud. Wave your hand: you should see `IR: object detected`.
+5. Upload, then open Serial Monitor at 115200 baud. You should see
+   `Wi-Fi connected. Local data: http://192.168.x.x/data`. Wave your hand: `IR: object detected`.
 
 ## How to add a sensor
 
 Three small steps, no website code:
 
 1. **Blynk console:** add a datastream, e.g. Virtual Pin `V1`, type Double.
-2. **Firmware** (`sendBlynk()` and `postLocal()`): read the sensor, then one line per destination:
+2. **Firmware:** read the sensor, then one line in `sendBlynk()` and one in `handleData()`:
    ```cpp
    Blynk.virtualWrite(V1, temperature);
-   addLocal(json, "temperature", temperature, "°C");
+   addReading(json, "temperature", temperature, "°C");
    ```
 3. **`config/sensors.json`:** add one entry and restart the server:
    ```json
@@ -96,7 +112,7 @@ Three small steps, no website code:
    ```
    `type` is `"binary"` (on/off with `onText`/`offText`, step chart) or `"number"` (value + unit, line chart).
 
-Any other key the ESP32 posts in Local Wi-Fi mode also gets a card automatically.
+Any other key the ESP32 returns from `/data` also gets a card automatically in Local mode.
 
 ## Troubleshooting
 
@@ -105,21 +121,20 @@ Any other key the ESP32 posts in Local Wi-Fi mode also gets a card automatically
 | Dashboard says "Blynk not set up" | `BLYNK_TOKEN` is empty in `.env`. Paste the token and restart `npm start`. |
 | "Blynk error: ... Invalid token" | Wrong token, or `BLYNK_SERVER` is not your region (e.g. `blr1.blynk.cloud`). |
 | "Blynk error: ... rate limited" | Blynk's message quota or rate limit was hit. The server backs off automatically; raise `BLYNK_POLL_MS` (e.g. 5000) and close dashboards you aren't using. |
-| Blynk shows "Device offline" | The ESP32 isn't connected to Blynk. Check Serial Monitor, the auth token in `secrets.h`, and that the Wi-Fi is **2.4 GHz** (ESP32 can't use 5 GHz). |
-| Local Wi-Fi: `Local POST -1 connection refused` | Server not running, or wrong IP in `LOCAL_URL`. Re-copy it from the `npm start` output. |
-| Local Wi-Fi: works on the laptop, not from the ESP32/phone | **Windows Firewall:** the first `npm start` shows a popup - click **Allow** (tick Private networks). Missed it? Windows Security -> Firewall -> Allow an app -> Node.js. |
-| Local Wi-Fi: no data at all | ESP32 and laptop must be on the **same** network. A phone hotspot works as the shared network (2.4 GHz). |
-| `Local POST 401` | `LOCAL_TOKEN` in `secrets.h` doesn't match `LOCAL_TOKEN` in `.env`. |
-| Laptop IP changed | Update `LOCAL_URL` in `secrets.h` and re-flash. |
+| Blynk shows "Device offline" | The ESP32 isn't connected to Blynk. Check Serial Monitor, the auth token in `secrets.h`, and that the Wi-Fi is **2.4 GHz** (the ESP32 can't use 5 GHz). |
+| Local: "ESP32 not reachable on this network" | The laptop and the ESP32 must be on the **same** Wi-Fi. A phone hotspot works as the shared network (2.4 GHz). Guest networks often block devices from seeing each other. |
+| Local: address shows `agrifly.local` and it doesn't resolve | V10 isn't set (check the V10 datastream exists and the ESP32 reached Blynk). Set `ESP_HOST` in `.env` to the IP shown in Serial Monitor (`Local data: http://<ip>/data`) and restart. |
+| Local: the IP keeps changing | Give the ESP32 a fixed IP (DHCP reservation) in your router, or rely on V10, which the server re-reads after 3 failures. |
+| Phone can't open the dashboard | Use the `Dashboard:` address from `npm start`, not `localhost`. **Windows Firewall:** the first `npm start` shows a popup - click **Allow** (tick Private networks). |
 
 ## Project layout
 
 ```
-server.js                     Express server: Blynk poller, local POST, SSE, JSONL storage
+server.js                     Express server: Blynk + ESP32 pollers (on demand), SSE, JSONL storage
 config/sensors.json           Sensor list: key, Blynk pin, label, unit, binary/number
 public/                       Landing page and dashboard (plain HTML/CSS/JS, Chart.js + Leaflet from CDN)
 firmware/agrifly_esp32/       ESP32 sketch + secrets.example.h
-tools/simulate.js             Fake Local Wi-Fi device (npm run simulate [-- --all])
+tools/simulate.js             Fake ESP32 at http://localhost:8080/data (npm run simulate [-- --all])
 tools/smoke-test.js           npm test
 docs/api.md                   API and data formats
 data/readings.jsonl           Saved readings (gitignored, created on first run)

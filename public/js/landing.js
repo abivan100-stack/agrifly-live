@@ -154,8 +154,17 @@
   }
 
   // ---------- modes ----------
+  // The server polls Blynk only while someone watches; "Live drone" is a watcher, the demo is not.
+  let watch = null;
   function setMode(next, byUser) {
     mode = next;
+    if (mode === 'live' && !watch) {
+      watch = new EventSource('/api/stream?source=blynk');
+      watch.onmessage = () => poll();
+    } else if (mode === 'demo' && watch) {
+      watch.close();
+      watch = null;
+    }
     if (byUser) userChose = true;
     $('mode-live').setAttribute('aria-pressed', String(mode === 'live'));
     $('mode-demo').setAttribute('aria-pressed', String(mode === 'demo'));
