@@ -8,29 +8,25 @@
   <link rel="icon" href="img/logo.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=VT323&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Semi+Condensed:wght@600&family=VT323&display=swap">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body class="landing">
-  <!-- Desktop: the briefing column scrolls on the left while the camera view stays fixed on the right.
-       Phone: everything stacks in this order. -->
-  <header class="brief brief-top">
+  <!-- Laptop and desktop: one screen, nothing scrolls. Phones: the same parts stack. -->
+  <header class="top">
     <a class="brand" href="/"><img src="img/logo.svg" alt="" width="28" height="28">AgriFly</a>
-    <nav>
-      <a href="#how">How it works</a>
-      <a href="/dashboard">Live data</a>
-    </nav>
+    <a class="btn" href="/dashboard">Open live dashboard</a>
   </header>
 
-  <main>
-    <section class="brief hero">
+  <main class="stage">
+    <section class="pitch">
       <h1>Smarter technology for smarter farming</h1>
       <p class="lead">AgriFly is a drone with a small sensor pack. As it flies over the field it sends readings every
         few seconds, tagged with its GPS position, to a live dashboard.</p>
-      <p class="lead">We are testing with an IR sensor now. Temperature, humidity, light, soil and air sensors come next.</p>
+      <p class="testing">Testing now with an IR sensor. Temperature, humidity, light, soil and air sensors come next.</p>
       <div class="actions">
         <a class="btn" href="/dashboard">View live data</a>
-        <a class="btn quiet" href="#how">How it works</a>
+        <a class="btn quiet" href="#feed" id="fly-link">Fly the demo</a>
       </div>
     </section>
 
@@ -80,56 +76,66 @@
       </div>
       <p class="feed-note" id="feed-note">Demo readings are simulated. Switch to Live drone when the drone is flying.</p>
     </section>
+  </main>
 
-    <section class="brief why" aria-labelledby="why-title">
-      <h2 id="why-title">Why AgriFly</h2>
-      <dl class="issues">
-        <div>
-          <dt>No real-time field intelligence</dt>
-          <dd>Farmers rely on slow, manual walk-through inspections.</dd>
-          <dd class="answer">Live sensor readings every few seconds.</dd>
-        </div>
-        <div>
-          <dt>Crop stress spotted late</dt>
-          <dd>Dry soil, heat or humidity changes are noticed after the damage starts.</dd>
-          <dd class="answer">Trends over time instead of one-off checks.</dd>
-        </div>
-        <div>
-          <dt>Water, fertilizer and labour wasted</dt>
-          <dd>Resources are used without data on actual field conditions.</dd>
-          <dd class="answer">Measured conditions to plan with, and less walking the field.</dd>
-        </div>
-        <div>
-          <dt>Hard to compare parts of a field</dt>
-          <dd>Readings aren't tied to a location, so areas blur together.</dd>
-          <dd class="answer">Every reading is GPS-tagged and placed on the map.</dd>
-        </div>
-      </dl>
-    </section>
+  <!-- The rest of the story lives in tabs, so the page never has to scroll. -->
+  <section class="deck" aria-label="About AgriFly">
+    <div class="tabs" role="tablist" aria-label="About AgriFly">
+      <button type="button" role="tab" id="tab-how" aria-controls="panel-how" aria-selected="true">How it works</button>
+      <button type="button" role="tab" id="tab-why" aria-controls="panel-why" aria-selected="false" tabindex="-1">Why AgriFly</button>
+      <button type="button" role="tab" id="tab-team" aria-controls="panel-team" aria-selected="false" tabindex="-1">Team</button>
+    </div>
 
-    <section class="brief how" id="how" aria-labelledby="how-title">
-      <h2 id="how-title">How it works</h2>
-      <ol class="flow">
+    <div class="panel" role="tabpanel" id="panel-how" aria-labelledby="tab-how">
+      <!-- a dot runs along this line each time a reading comes in -->
+      <ol class="path" id="path">
         <li>
-          <h3>The drone flies and the sensors read</h3>
-          <p>A 5-inch FPV drone carries an ESP32 and its sensors. Testing now: an IR obstacle sensor.</p>
+          <h3>The drone reads the field</h3>
+          <p>A 5-inch FPV drone carries an ESP32 and its sensors.</p>
         </li>
         <li>
-          <h3>The ESP32 sends via Blynk or Wi-Fi</h3>
-          <p>Readings go to Blynk Cloud from any network, or are read straight from the ESP32 on the same Wi-Fi.</p>
+          <h3>The ESP32 sends the reading</h3>
+          <p>To Blynk Cloud from any network, or straight over local Wi-Fi.</p>
         </li>
         <li>
           <h3>The dashboard updates live</h3>
-          <p>Readings, a chart and a map update on any laptop or phone.</p>
+          <p>Readings, history and a GPS map on any laptop or phone.</p>
         </li>
       </ol>
-    </section>
-  </main>
+    </div>
 
-  <footer class="brief">
-    <p>Team 5: Rokith Kumaar, Deepak Kumar and Adhithya. Academic year 2026&ndash;27.</p>
-    <p><span class="planned">Planned</span> NDVI imaging, thermal imaging, AI crop analysis, autonomous flight.</p>
-  </footer>
+    <div class="panel" role="tabpanel" id="panel-why" aria-labelledby="tab-why" hidden>
+      <dl class="issues">
+        <div>
+          <dt>Slow manual checks</dt>
+          <dd>Farmers walk the field to inspect it.</dd>
+          <dd class="answer">Readings every few seconds.</dd>
+        </div>
+        <div>
+          <dt>Crop stress spotted late</dt>
+          <dd>Dry soil or heat is noticed after damage starts.</dd>
+          <dd class="answer">Trends over time, not one-off checks.</dd>
+        </div>
+        <div>
+          <dt>Water and labour wasted</dt>
+          <dd>Resources are used without field data.</dd>
+          <dd class="answer">Measured conditions to plan with.</dd>
+        </div>
+        <div>
+          <dt>Field areas blur together</dt>
+          <dd>Readings aren't tied to a location.</dd>
+          <dd class="answer">Every reading is GPS-tagged on a map.</dd>
+        </div>
+      </dl>
+    </div>
+
+    <div class="panel" role="tabpanel" id="panel-team" aria-labelledby="tab-team" hidden>
+      <div class="team">
+        <p><strong>Team 5</strong> Rokith Kumaar, Deepak Kumar and Adhithya. Academic year 2026&ndash;27.</p>
+        <p><strong>Planned</strong> NDVI imaging, thermal imaging, AI crop analysis, autonomous flight.</p>
+      </div>
+    </div>
+  </section>
 
   <script src="js/common.js"></script>
   <script src="js/landing.js"></script>

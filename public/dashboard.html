@@ -7,7 +7,7 @@
   <link rel="icon" href="img/logo.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Semi+Condensed:wght@600&display=swap">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <link rel="stylesheet" href="css/style.css">
 </head>
@@ -32,7 +32,7 @@
 
   <main class="desk-grid">
     <!-- the reading picked in the list, large, with its history -->
-    <section class="focus" aria-live="polite">
+    <section class="focus">
       <div class="focus-head">
         <div>
           <h1 id="focus-label">Live field data</h1>
@@ -45,6 +45,13 @@
           <button type="button" data-range="0" aria-pressed="false">All</button>
         </div>
       </div>
+      <!-- summary of the chosen time range -->
+      <dl class="stats" id="stats"></dl>
+      <div class="strip-box" id="strip-box" hidden>
+        <span class="chart-title"><i class="swatch" aria-hidden="true"></i><span id="strip-title">On</span></span>
+        <canvas id="strip" aria-hidden="true"></canvas>
+      </div>
+      <span class="chart-title" id="chart-title" hidden></span>
       <div class="chart-box"><canvas id="chart" aria-label="Chart of the selected reading over time"></canvas></div>
     </section>
 

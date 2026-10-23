@@ -189,6 +189,16 @@
       : 'Real readings from the drone, drawn like the pilot’s on-screen display.';
   }
 
+  // "How it works": a dot runs drone -> ESP32 -> dashboard for each new reading
+  let pulsedT = 0;
+  function pulse() {
+    if (reduceMotion) return;
+    const path = $('path');
+    path.classList.remove('pulse');
+    void path.offsetWidth; // restart the CSS animation
+    path.classList.add('pulse');
+  }
+
   async function poll() {
     // Blynk Cloud first, local Wi-Fi as well; show whichever has the newer reading
     try {
@@ -198,6 +208,8 @@
     } catch {
       live = null;
     }
+    if (mode === 'demo') pulse();
+    else if (live && live.record.t !== pulsedT) { pulsedT = live.record.t; pulse(); }
     if (!userChose) {
       const droneLive = live && live.age <= OFFLINE_AFTER_MS;
       if ((droneLive ? 'live' : 'demo') !== mode) setMode(droneLive ? 'live' : 'demo', false);
@@ -250,6 +262,34 @@
   });
   feed.addEventListener('keyup', (e) => { if (e.key in KEYS) fly.steer = 0; });
   feed.addEventListener('blur', () => { fly.steer = 0; });
+
+  $('fly-link').addEventListener('click', (e) => {
+    e.preventDefault();
+    setMode('demo', true);
+    feed.focus();
+  });
+
+  // tabs (How it works / Why AgriFly / Team), arrow keys move between them
+  const tabs = [...document.querySelectorAll('[role="tab"]')];
+  function openTab(tab) {
+    for (const t of tabs) {
+      const on = t === tab;
+      t.setAttribute('aria-selected', String(on));
+      t.tabIndex = on ? 0 : -1;
+      $(t.getAttribute('aria-controls')).hidden = !on;
+    }
+  }
+  tabs.forEach((tab, i) => {
+    tab.addEventListener('click', () => openTab(tab));
+    tab.addEventListener('keydown', (e) => {
+      const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[e.key];
+      if (!step) return;
+      e.preventDefault();
+      const next = tabs[(i + step + tabs.length) % tabs.length];
+      openTab(next);
+      next.focus();
+    });
+  });
 
   setMode('demo', false);
   poll();

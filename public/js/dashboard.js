@@ -232,63 +232,149 @@
     }
   }
 
+  // On/off sensors: a strip of when it was on, plus detections per minute as bars.
+  // Number sensors: one clean line, with low / average / high for the chosen range.
+  let chartKind = null;
+  const clock = (t) => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: chart.$bucket < 60000 ? '2-digit' : undefined });
+
   function updateChart() {
     const key = selectedKey;
     for (const [k, c] of cards) c.el.setAttribute('aria-pressed', String(k === key));
     updateFocus();
     if (!key || typeof Chart === 'undefined') return;
     const binary = isBinary(key);
-    const from = range ? serverNow() - range : 0;
-    const data = [];
+    const now = serverNow();
+    const from = range ? now - range : 0;
+    const pts = [];
+    let seed = null; // last value before the range, so the strip knows the starting state
     for (const r of records) {
       const rd = r.readings[key];
-      if (r.t < from || !rd) continue;
-      data.push({ x: r.t, y: binary ? (rd.value ? 1 : 0) : rd.value });
+      if (!rd) continue;
+      const p = { x: r.t, y: binary ? (rd.value ? 1 : 0) : rd.value };
+      if (r.t < from) seed = p; else pts.push(p);
     }
-    if (!chart) chart = makeChart();
-    const ds = chart.data.datasets[0];
-    ds.data = data;
-    ds.label = meta(key).label;
-    ds.stepped = binary ? 'before' : false;
-    ds.cubicInterpolationMode = binary ? 'default' : 'monotone';
-    const y = chart.options.scales.y;
-    y.min = binary ? -0.1 : undefined;
-    y.max = binary ? 1.1 : undefined;
-    y.afterBuildTicks = binary ? (axis) => { axis.ticks = [{ value: 0 }, { value: 1 }]; } : undefined;
-    y.ticks.callback = binary ? (v) => stateText(key, v === 1) : (v) => format(v);
+    const kind = binary ? 'bar' : 'line';
+    if (chartKind !== kind) { chart?.destroy(); chart = makeChart(kind); chartKind = kind; }
+    $('strip-box').hidden = !binary;
+    $('chart-title').hidden = !binary;
+    if (!pts.length) { renderStats([]); chart.data.datasets[0].data = []; chart.update('none'); return; }
     // don't stretch a few minutes of data across an empty 15 min / 1 h axis
-    chart.options.scales.x.min = range && data.length ? Math.max(from, data[0].x) : undefined;
-    chart.options.scales.x.max = data.length ? data.at(-1).x : undefined;
-    chart.update('none');
+    const start = pts[0].x;
+    const x = chart.options.scales.x;
+    if (binary) {
+      const end = Math.max(now, pts.at(-1).x);
+      const size = bucketSize(end - start);
+      const first = Math.floor(start / size) * size;
+      const counts = [];
+      for (let t = first; t < end || !counts.length; t += size) counts.push({ x: t + size / 2, y: 0 });
+      let prev = seed?.y ?? null, edges = 0, onMs = 0, lastHit = null;
+      pts.forEach((p, i) => {
+        if (prev === 0 && p.y === 1) { counts[Math.min(counts.length - 1, Math.floor((p.x - first) / size))].y++; edges++; lastHit = p.x; }
+        if (p.y === 1) onMs += (pts[i + 1]?.x ?? end) - p.x;
+        prev = p.y;
+      });
+      chart.data.datasets[0].data = counts;
+      chart.$bucket = size;
+      x.min = first; x.max = first + counts.length * size;
+      $('chart-title').textContent = `Detections per ${bucketName(size)}`;
+      $('strip-title').textContent = stateText(key, 1);
+      chart.update('none');
+      drawStrip(pts, seed, x.min, x.max, end);
+      renderStats([
+        ['Detections', String(edges)],
+        ['Time detected', `${Math.round((onMs / Math.max(1, end - start)) * 100)}%`],
+        ['Last detection', lastHit ? ago(now - lastHit) : 'None in range'],
+      ]);
+    } else {
+      chart.data.datasets[0].data = pts;
+      x.min = start; x.max = pts.at(-1).x;
+      chart.update('none');
+      const ys = pts.map((p) => p.y);
+      const unit = meta(key).unit || records.findLast((r) => r.readings[key])?.readings[key].unit || '';
+      const f = (v) => `${format(v)} ${unit}`.trim();
+      renderStats([['Low', f(Math.min(...ys))], ['Average', f(ys.reduce((a, b) => a + b, 0) / ys.length)], ['High', f(Math.max(...ys))]]);
+    }
   }
 
-  function makeChart() {
-    const text = css('--muted'), grid = css('--rule'), green = css('--field');
+  // bar width: the smallest step that keeps the chart under ~30 bars
+  function bucketSize(span) {
+    const steps = [10, 30, 60, 120, 300, 600, 900, 1800, 3600].map((s) => s * 1000);
+    return steps.find((s) => span / s <= 30) ?? 3600000;
+  }
+  const bucketName = (size) => (size < 60000 ? `${size / 1000} seconds`
+    : size === 60000 ? 'minute' : size === 3600000 ? 'hour' : `${size / 60000} minutes`);
+
+  function renderStats(items) {
+    $('stats').replaceChildren(...items.map(([k, v]) => {
+      const d = document.createElement('div');
+      d.append(Object.assign(document.createElement('dt'), { textContent: k }), Object.assign(document.createElement('dd'), { textContent: v }));
+      return d;
+    }));
+  }
+
+  // lined up with the bar chart's plot area so both share one time axis
+  function drawStrip(pts, seed, min, max, end) {
+    const canvas = $('strip');
+    const dpr = window.devicePixelRatio || 1;
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    canvas.width = w * dpr; canvas.height = h * dpr;
+    const ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+    const { left, right } = chart.chartArea;
+    const sx = (t) => left + ((t - min) / (max - min || 1)) * (right - left);
+    ctx.fillStyle = css('--field-soft');
+    ctx.fillRect(left, 0, sx(end) - left, h); // track stops at "now"
+    ctx.fillStyle = css('--field-strong');
+    // one solid block per "on" run, from the first on-sample to the next off-sample
+    let runStart = seed?.y === 1 ? min : null;
+    const fill = (to) => { const a = sx(Math.max(runStart, min)); ctx.fillRect(a, 0, Math.max(2, sx(to) - a), h); };
+    for (const p of pts) {
+      if (p.y === 1 && runStart === null) runStart = p.x;
+      if (p.y === 0 && runStart !== null) { fill(p.x); runStart = null; }
+    }
+    if (runStart !== null) fill(end);
+  }
+
+  function makeChart(kind) {
+    const text = css('--muted'), grid = css('--rule'), green = css('--field'), strong = css('--field-strong');
     Chart.defaults.font.family = css('--body');
+    Chart.defaults.font.size = 12;
+    const bar = kind === 'bar';
     return new Chart($('chart'), {
-      type: 'line',
-      data: { datasets: [{ data: [], borderColor: green, backgroundColor: green + '22', fill: true, pointRadius: 0, borderWidth: 2 }] },
+      type: kind,
+      data: { datasets: [bar
+        ? { data: [], backgroundColor: green, hoverBackgroundColor: strong, borderRadius: 2, barPercentage: 1, categoryPercentage: 0.72 }
+        : { data: [], borderColor: green, borderWidth: 2, fill: false, cubicInterpolationMode: 'monotone',
+            pointRadius: (c) => (c.dataIndex === c.dataset.data.length - 1 ? 4 : 0), pointBackgroundColor: green,
+            pointHoverRadius: 5, pointHoverBackgroundColor: strong }] },
       options: {
         animation: false,
         maintainAspectRatio: false,
         parsing: false,
-        interaction: { mode: 'nearest', axis: 'x', intersect: false },
+        interaction: bar ? { mode: 'nearest', axis: 'x', intersect: true } : { mode: 'nearest', axis: 'x', intersect: false },
         plugins: {
-          legend: { display: false }, // the dropdown already names the series
-          tooltip: { callbacks: {
-            title: (items) => new Date(items[0].parsed.x).toLocaleTimeString(),
-            label: (item) => {
-              const key = selectedKey;
-              return isBinary(key) ? stateText(key, item.parsed.y === 1) : `${format(item.parsed.y)} ${meta(key).unit || ''}`.trim();
+          legend: { display: false }, // the focus panel already names the reading
+          tooltip: {
+            backgroundColor: css('--station'), padding: 10, displayColors: false, cornerRadius: 4,
+            callbacks: {
+              title: (items) => {
+                const t = items[0].parsed.x;
+                return bar ? `${clock(t - chart.$bucket / 2)} to ${clock(t + chart.$bucket / 2)}` : new Date(t).toLocaleTimeString();
+              },
+              label: (item) => (bar
+                ? `${item.parsed.y} detection${item.parsed.y === 1 ? '' : 's'}`
+                : `${format(item.parsed.y)} ${meta(selectedKey).unit || ''}`.trim()),
             },
-          } },
+          },
         },
         scales: {
-          x: { type: 'linear', ticks: { color: text, maxTicksLimit: innerWidth < 600 ? 3 : 7, maxRotation: 0, callback(v) {
-            const short = this.max - this.min < 10 * 60000; // show seconds on short spans
-            return new Date(v).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: short ? '2-digit' : undefined });
-          } }, grid: { color: grid } },
-          y: { ticks: { color: text }, grid: { color: grid } },
+          x: { type: 'linear', offset: false, grid: { display: false }, border: { color: grid },
+            ticks: { color: text, maxTicksLimit: innerWidth < 600 ? 3 : 7, maxRotation: 0, callback(v) {
+              const short = this.max - this.min < 10 * 60000; // show seconds on short spans
+              return new Date(v).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: short ? '2-digit' : undefined });
+            } } },
+          y: { beginAtZero: bar, suggestedMax: bar ? 3 : undefined, border: { display: false },
+            grid: { color: grid }, ticks: { color: text, precision: bar ? 0 : undefined, maxTicksLimit: 5, callback: (v) => format(v) } },
         },
       },
     });
@@ -430,11 +516,11 @@
   for (const b of document.querySelectorAll('[data-source]')) b.addEventListener('click', () => { if (b.dataset.source !== source) setSource(b.dataset.source); });
   setInterval(tick, 1000);
   setInterval(refreshStatus, 3000);
-  setInterval(updateChart, 15000); // slide the time window even when no data arrives
+  setInterval(updateChart, 5000); // slide the time window even when no data arrives
   let resizeTimer;
   window.addEventListener('resize', () => {
     clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(() => { for (const key of cards.keys()) updateCard(key); }, 150);
+    resizeTimer = setTimeout(() => { for (const key of cards.keys()) updateCard(key); updateChart(); }, 150);
   });
 
   (async () => {
