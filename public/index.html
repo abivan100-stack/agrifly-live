@@ -8,111 +8,108 @@
   <link rel="icon" href="img/logo.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&family=VT323&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=VT323&display=swap">
   <link rel="stylesheet" href="css/style.css">
 </head>
-<body>
-  <header class="topbar">
-    <div class="wrap">
-      <a class="brand" href="/"><img src="img/logo.svg" alt="" width="28" height="28">AgriFly</a>
-      <nav>
-        <a href="#how">How it works</a>
-        <a href="/dashboard">Live data</a>
-      </nav>
-    </div>
+<body class="landing">
+  <!-- Desktop: the briefing column scrolls on the left while the camera view stays fixed on the right.
+       Phone: everything stacks in this order. -->
+  <header class="brief brief-top">
+    <a class="brand" href="/"><img src="img/logo.svg" alt="" width="28" height="28">AgriFly</a>
+    <nav>
+      <a href="#how">How it works</a>
+      <a href="/dashboard">Live data</a>
+    </nav>
   </header>
 
   <main>
-    <section class="wrap intro">
+    <section class="brief hero">
       <h1>Smarter technology for smarter farming</h1>
-      <p class="lead">AgriFly is a drone with a small sensor pack. As it flies over the field it sends readings every few seconds,
-        tagged with its GPS position, to a live dashboard. We are testing with an IR sensor now; temperature,
-        humidity, light, soil and air sensors come next.</p>
+      <p class="lead">AgriFly is a drone with a small sensor pack. As it flies over the field it sends readings every
+        few seconds, tagged with its GPS position, to a live dashboard.</p>
+      <p class="lead">We are testing with an IR sensor now. Temperature, humidity, light, soil and air sensors come next.</p>
       <div class="actions">
         <a class="btn" href="/dashboard">View live data</a>
         <a class="btn quiet" href="#how">How it works</a>
       </div>
     </section>
 
-    <div class="feed-wrap">
-    <div class="feed-bar">
-      <div class="modes" role="group" aria-label="Camera view">
-        <button type="button" id="mode-live" aria-pressed="false">Live drone</button>
-        <button type="button" id="mode-demo" aria-pressed="true">Fly the demo</button>
-      </div>
-      <span class="hint" id="mode-hint">Steer over the field and watch the readings change by zone.</span>
-    </div>
-
     <!-- The pilot's view: readings shown the way Betaflight's on-screen display shows them.
          Live mode shows the real drone; demo mode lets the visitor fly over a simulated field. -->
-    <section class="feed" id="feed" tabindex="0" aria-label="Drone camera view. In demo mode use the arrow keys to steer and change speed, and W and S to change altitude.">
-      <div class="world" id="world" aria-hidden="true">
-      <div class="ground"></div>
-      <svg class="treeline" viewBox="0 0 1200 24" preserveAspectRatio="none" aria-hidden="true">
-        <path fill="#5d7457" d="M0 24V12 L40 11 L65 7 L103 10 L126 15 L170 9 L201 13 L247 5 L287 7 L334 6 L376 10 L403 5 L461 16 L486 9 L544 6 L581 11 L628 7 L655 16 L693 7 L735 8 L761 13 L795 8 L818 15 L848 15 L887 7 L931 9 L981 12 L1006 7 L1044 5 L1066 9 L1113 12 L1171 8 L1200 10 V24z"/>
-      </svg>
+    <section class="cockpit" aria-label="Drone camera">
+      <div class="cockpit-bar">
+        <div class="modes" role="group" aria-label="Camera view">
+          <button type="button" id="mode-live" aria-pressed="false">Live drone</button>
+          <button type="button" id="mode-demo" aria-pressed="true">Fly the demo</button>
+        </div>
+        <span class="hint" id="mode-hint">Steer over the field and watch the readings change by zone.</span>
       </div>
-      <div class="haze" aria-hidden="true"></div>
-      <div class="vignette" aria-hidden="true"></div>
-      <canvas class="minimap" id="minimap" width="120" height="120" aria-hidden="true"></canvas>
 
-      <div class="osd">
-        <div class="tl"><div id="osd-device">AGRIFLY</div><div id="osd-link" class="link-lost">NO LINK</div></div>
-        <div class="tr"><div id="osd-time">--:--:--</div></div>
-        <svg class="cross" viewBox="0 0 64 64" aria-hidden="true">
-          <g fill="none" stroke="#000" stroke-width="7" stroke-linecap="square"><path d="M6 32h14M44 32h14M32 22v-8"/><rect x="29" y="29" width="6" height="6"/></g>
-          <g fill="none" stroke="#fff" stroke-width="3" stroke-linecap="square"><path d="M6 32h14M44 32h14M32 22v-8"/><rect x="29" y="29" width="6" height="6" fill="#fff"/></g>
-        </svg>
-        <div class="alert" id="osd-alert">CONNECTING<small></small></div>
-        <div class="bl" id="osd-readings"></div>
-        <div class="br" id="osd-gps"></div>
-      </div>
-    </section>
-    <div class="controls" id="controls">
-      <div class="steer">
-        <button type="button" data-steer="-1" aria-label="Steer left">&lsaquo;</button>
-        <button type="button" data-steer="1" aria-label="Steer right">&rsaquo;</button>
-      </div>
-      <label class="slider">Speed <input type="range" id="speed" min="0" max="12" step="1" value="5"><output id="speed-out">5 m/s</output></label>
-      <label class="slider">Altitude <input type="range" id="alt" min="3" max="30" step="1" value="8"><output id="alt-out">8 m</output></label>
-      <span class="keys">Click the view, then <kbd>&larr;</kbd> <kbd>&rarr;</kbd> steer, <kbd>&uarr;</kbd> <kbd>&darr;</kbd> speed, <kbd>W</kbd> <kbd>S</kbd> altitude</span>
-    </div>
-    <div class="feed-note">
-      <span id="feed-note">Demo readings are simulated. Switch to Live drone when the drone is flying.</span>
-      <a class="textlink" href="/dashboard">Open the full dashboard</a>
-    </div>
-    </div>
+      <div class="feed" id="feed" tabindex="0" aria-label="Drone camera view. In demo mode use the arrow keys to steer and change speed, and W and S to change altitude.">
+        <div class="world" id="world" aria-hidden="true">
+          <div class="ground"></div>
+          <svg class="treeline" viewBox="0 0 1200 24" preserveAspectRatio="none" aria-hidden="true">
+            <path fill="#5d7457" d="M0 24V12 L40 11 L65 7 L103 10 L126 15 L170 9 L201 13 L247 5 L287 7 L334 6 L376 10 L403 5 L461 16 L486 9 L544 6 L581 11 L628 7 L655 16 L693 7 L735 8 L761 13 L795 8 L818 15 L848 15 L887 7 L931 9 L981 12 L1006 7 L1044 5 L1066 9 L1113 12 L1171 8 L1200 10 V24z"/>
+          </svg>
+        </div>
+        <div class="haze" aria-hidden="true"></div>
+        <div class="vignette" aria-hidden="true"></div>
+        <canvas class="minimap" id="minimap" width="120" height="120" aria-hidden="true"></canvas>
 
-    <section class="wrap section" aria-labelledby="problems-title">
-        <h2 id="problems-title">Why AgriFly</h2>
-        <p class="sub">Four problems with how fields are checked today, and how AgriFly addresses each one.</p>
-        <table class="compare">
-          <thead><tr><th scope="col">What farmers deal with today</th><th scope="col">What AgriFly does</th></tr></thead>
-          <tbody>
-            <tr>
-              <td><b>No real-time field intelligence</b><span>Farmers rely on slow, manual walk-through inspections.</span></td>
-              <td>Live sensor readings every few seconds.</td>
-            </tr>
-            <tr>
-              <td><b>Crop stress spotted late</b><span>Dry soil, heat or humidity changes are noticed after the damage starts.</span></td>
-              <td>Trends over time instead of one-off checks.</td>
-            </tr>
-            <tr>
-              <td><b>Water, fertilizer and labour wasted</b><span>Resources are used without data on actual field conditions.</span></td>
-              <td>Measured conditions to plan with, and less walking the field.</td>
-            </tr>
-            <tr>
-              <td><b>Hard to compare parts of a field</b><span>Readings aren't tied to a location, so areas blur together.</span></td>
-              <td>Every reading is GPS-tagged and placed on the map.</td>
-            </tr>
-          </tbody>
-        </table>
+        <div class="osd">
+          <div class="tl"><div id="osd-device">AGRIFLY</div><div id="osd-link" class="link-lost">NO LINK</div></div>
+          <div class="tr"><div id="osd-time">--:--:--</div></div>
+          <svg class="cross" viewBox="0 0 64 64" aria-hidden="true">
+            <g fill="none" stroke="#000" stroke-width="7" stroke-linecap="square"><path d="M6 32h14M44 32h14M32 22v-8"/><rect x="29" y="29" width="6" height="6"/></g>
+            <g fill="none" stroke="#fff" stroke-width="3" stroke-linecap="square"><path d="M6 32h14M44 32h14M32 22v-8"/><rect x="29" y="29" width="6" height="6" fill="#fff"/></g>
+          </svg>
+          <div class="alert" id="osd-alert">CONNECTING<small></small></div>
+          <div class="bl" id="osd-readings"></div>
+          <div class="br" id="osd-gps"></div>
+        </div>
+      </div>
+
+      <div class="controls" id="controls">
+        <div class="steer">
+          <button type="button" data-steer="-1" aria-label="Steer left">&lsaquo;</button>
+          <button type="button" data-steer="1" aria-label="Steer right">&rsaquo;</button>
+        </div>
+        <label class="slider">Speed <input type="range" id="speed" min="0" max="12" step="1" value="5"><output id="speed-out">5 m/s</output></label>
+        <label class="slider">Altitude <input type="range" id="alt" min="3" max="30" step="1" value="8"><output id="alt-out">8 m</output></label>
+        <span class="keys"><kbd>&larr;</kbd><kbd>&rarr;</kbd> steer <kbd>&uarr;</kbd><kbd>&darr;</kbd> speed <kbd>W</kbd><kbd>S</kbd> altitude</span>
+      </div>
+      <p class="feed-note" id="feed-note">Demo readings are simulated. Switch to Live drone when the drone is flying.</p>
     </section>
 
-    <section class="wrap section" id="how" aria-labelledby="how-title">
+    <section class="brief why" aria-labelledby="why-title">
+      <h2 id="why-title">Why AgriFly</h2>
+      <dl class="issues">
+        <div>
+          <dt>No real-time field intelligence</dt>
+          <dd>Farmers rely on slow, manual walk-through inspections.</dd>
+          <dd class="answer">Live sensor readings every few seconds.</dd>
+        </div>
+        <div>
+          <dt>Crop stress spotted late</dt>
+          <dd>Dry soil, heat or humidity changes are noticed after the damage starts.</dd>
+          <dd class="answer">Trends over time instead of one-off checks.</dd>
+        </div>
+        <div>
+          <dt>Water, fertilizer and labour wasted</dt>
+          <dd>Resources are used without data on actual field conditions.</dd>
+          <dd class="answer">Measured conditions to plan with, and less walking the field.</dd>
+        </div>
+        <div>
+          <dt>Hard to compare parts of a field</dt>
+          <dd>Readings aren't tied to a location, so areas blur together.</dd>
+          <dd class="answer">Every reading is GPS-tagged and placed on the map.</dd>
+        </div>
+      </dl>
+    </section>
+
+    <section class="brief how" id="how" aria-labelledby="how-title">
       <h2 id="how-title">How it works</h2>
-      <p class="sub">From the field to your screen in a few seconds.</p>
-      <ol class="steps">
+      <ol class="flow">
         <li>
           <h3>The drone flies and the sensors read</h3>
           <p>A 5-inch FPV drone carries an ESP32 and its sensors. Testing now: an IR obstacle sensor.</p>
@@ -123,17 +120,15 @@
         </li>
         <li>
           <h3>The dashboard updates live</h3>
-          <p>Cards, charts and a map update on any laptop or phone on the same network.</p>
+          <p>Readings, a chart and a map update on any laptop or phone.</p>
         </li>
       </ol>
     </section>
   </main>
 
-  <footer>
-    <div class="wrap">
-      <p>Team 5: Rokith Kumaar, Deepak Kumar and Adhithya. Academic year 2026&ndash;27.</p>
-      <p class="planned"><b>Planned:</b> NDVI imaging, thermal imaging, AI crop analysis, autonomous flight.</p>
-    </div>
+  <footer class="brief">
+    <p>Team 5: Rokith Kumaar, Deepak Kumar and Adhithya. Academic year 2026&ndash;27.</p>
+    <p><span class="planned">Planned</span> NDVI imaging, thermal imaging, AI crop analysis, autonomous flight.</p>
   </footer>
 
   <script src="js/common.js"></script>

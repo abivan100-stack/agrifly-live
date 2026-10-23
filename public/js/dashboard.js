@@ -22,6 +22,8 @@
   const cards = new Map();   // key -> card parts
   let chart = null;
   let map = null, track = null, points = null, lastMarker = null, markers = [];
+  let selectedKey = null;    // the reading shown large in the focus panel, on the chart and on the map
+  let range = 900000;        // chart window in ms, 0 = all
 
   const serverNow = () => Date.now() + clockOffset;
   const last = () => records.at(-1);
@@ -45,7 +47,6 @@
     records = [];
     for (const c of cards.values()) c.el.remove();
     cards.clear();
-    $('chart-key').replaceChildren();
     if (map) { map.remove(); map = track = points = lastMarker = null; markers = []; }
     $('map').hidden = true;
     $('legend').hidden = true;
@@ -100,7 +101,7 @@
 
   // One selection drives the cards, the chart and the map colours.
   function select(key) {
-    $('chart-key').value = key;
+    selectedKey = key;
     updateChart();
     recolorMap();
     for (const k of cards.keys()) updateCard(k);
@@ -114,8 +115,8 @@
     el.type = 'button';
     el.className = binary ? 'card binary' : 'card';
     el.innerHTML = binary
-      ? '<div class="label"></div><div class="state off">No data yet</div><canvas></canvas><div class="detections"></div><div class="ago"></div>'
-      : '<div class="label"></div><div class="value"><span>--</span><small></small></div><canvas></canvas><div class="ago">No data yet</div>';
+      ? '<span class="label"></span><span class="state off">No data yet</span><canvas aria-hidden="true"></canvas><span class="detections"></span><span class="ago"></span>'
+      : '<span class="label"></span><span class="value"><span>--</span><small></small></span><canvas aria-hidden="true"></canvas><span class="ago">No data yet</span>';
     el.querySelector('.label').textContent = meta(key).label;
     el.addEventListener('click', () => select(key));
     // configured sensors first (in config order), then extra local keys alphabetically
@@ -199,21 +200,44 @@
   }
 
   // ---------- main chart ----------
+  // keep the selection valid: first reading in the list unless one was picked
   function syncChartOptions() {
-    const sel = $('chart-key');
-    const current = sel.value;
-    const keys = [...cards.keys()];
-    if (keys.join() === [...sel.options].map((o) => o.value).join()) return;
-    sel.replaceChildren(...keys.map((k) => new Option(meta(k).label, k)));
-    sel.value = keys.includes(current) ? current : keys[0] || '';
+    if (!cards.has(selectedKey)) selectedKey = cards.keys().next().value ?? null;
+  }
+
+  // the focus panel: selected reading, large
+  function updateFocus() {
+    const key = selectedKey;
+    const value = $('focus-value');
+    if (!key) return;
+    $('focus-label').textContent = meta(key).label;
+    const r = records.findLast((x) => x.readings[key]);
+    value.className = 'focus-value';
+    if (!r) {
+      value.textContent = '--';
+      $('focus-sub').textContent = 'No data yet';
+      return;
+    }
+    const v = r.readings[key].value;
+    const age = `updated ${ago(serverNow() - r.t)}`;
+    if (isBinary(key)) {
+      value.textContent = stateText(key, v);
+      value.classList.add(v ? 'on' : 'off');
+      const n = detections(key);
+      $('focus-sub').textContent = `${n} detection${n === 1 ? '' : 's'} in the last 10 min, ${age}`;
+    } else {
+      const unit = Object.assign(document.createElement('small'), { textContent: r.readings[key].unit || meta(key).unit || '' });
+      value.replaceChildren(format(v), unit);
+      $('focus-sub').textContent = age[0].toUpperCase() + age.slice(1);
+    }
   }
 
   function updateChart() {
-    const key = $('chart-key').value;
-    if (!key || typeof Chart === 'undefined') return;
+    const key = selectedKey;
     for (const [k, c] of cards) c.el.setAttribute('aria-pressed', String(k === key));
+    updateFocus();
+    if (!key || typeof Chart === 'undefined') return;
     const binary = isBinary(key);
-    const range = Number($('chart-range').value);
     const from = range ? serverNow() - range : 0;
     const data = [];
     for (const r of records) {
@@ -254,7 +278,7 @@
           tooltip: { callbacks: {
             title: (items) => new Date(items[0].parsed.x).toLocaleTimeString(),
             label: (item) => {
-              const key = $('chart-key').value;
+              const key = selectedKey;
               return isBinary(key) ? stateText(key, item.parsed.y === 1) : `${format(item.parsed.y)} ${meta(key).unit || ''}`.trim();
             },
           } },
@@ -324,7 +348,7 @@
       markers.splice(0, markers.length - 500).forEach((m) => points.removeLayer(m.marker));
       track.setLatLngs(markers.map((m) => m.marker.getLatLng()));
     }
-    const key = $('chart-key').value;
+    const key = selectedKey;
     const values = markers.map((m) => m.r.readings[key]?.value).filter((v) => v !== undefined);
     const min = Math.min(...values), max = Math.max(...values);
     for (const { marker, r } of markers) {
@@ -373,7 +397,7 @@
     // an unreachable ESP32 is shown even when older readings are on screen
     $('empty').hidden = !(s.alert || (!hasData && s.empty));
     $('empty').textContent = s.alert || s.empty || '';
-    $('view').hidden = !hasData;
+    updateFocus();
     const now = serverNow();
     for (const [key, c] of cards) {
       if (!c.lastT) continue;
@@ -396,8 +420,13 @@
   }
 
   // ---------- wiring ----------
-  $('chart-key').addEventListener('change', () => select($('chart-key').value));
-  $('chart-range').addEventListener('change', updateChart);
+  for (const b of document.querySelectorAll('[data-range]')) {
+    b.addEventListener('click', () => {
+      range = Number(b.dataset.range);
+      for (const o of document.querySelectorAll('[data-range]')) o.setAttribute('aria-pressed', String(o === b));
+      updateChart();
+    });
+  }
   for (const b of document.querySelectorAll('[data-source]')) b.addEventListener('click', () => { if (b.dataset.source !== source) setSource(b.dataset.source); });
   setInterval(tick, 1000);
   setInterval(refreshStatus, 3000);

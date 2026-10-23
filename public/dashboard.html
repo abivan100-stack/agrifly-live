@@ -7,74 +7,67 @@
   <link rel="icon" href="img/logo.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&display=swap">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <link rel="stylesheet" href="css/style.css">
 </head>
-<body>
-  <header class="topbar">
-    <div class="wrap">
-      <a class="brand" href="/"><img src="img/logo.svg" alt="" width="28" height="28">AgriFly</a>
-      <nav>
-        <a href="/">Home</a>
-        <a href="/dashboard" aria-current="page">Live data</a>
-      </nav>
+<body class="desk">
+  <header class="desk-bar">
+    <a class="brand" href="/"><img src="img/logo.svg" alt="" width="28" height="28">AgriFly</a>
+    <div class="modes" role="group" aria-label="Data source">
+      <button type="button" data-source="blynk" aria-pressed="true">Blynk Cloud</button>
+      <button type="button" data-source="local" aria-pressed="false">Local Wi-Fi</button>
     </div>
+    <div class="desk-status">
+      <span class="status" id="status" role="status">Waiting for device</span>
+      <span class="meta" id="meta">Connecting...</span>
+    </div>
+    <nav>
+      <a class="btn quiet" id="csv" href="/api/export.csv?source=blynk" download>Download CSV</a>
+      <a class="home" href="/">Home</a>
+    </nav>
   </header>
 
-  <main class="wrap">
-    <div class="dash-head">
-      <div>
-        <h1>Live field data</h1>
-        <div class="meta" id="meta">Connecting...</div>
-      </div>
-      <div class="right">
-        <div class="modes" role="group" aria-label="Data source">
-          <button type="button" data-source="blynk" aria-pressed="true">Blynk Cloud</button>
-          <button type="button" data-source="local" aria-pressed="false">Local Wi-Fi</button>
+  <p class="empty" id="empty" hidden></p>
+
+  <main class="desk-grid">
+    <!-- the reading picked in the list, large, with its history -->
+    <section class="focus" aria-live="polite">
+      <div class="focus-head">
+        <div>
+          <h1 id="focus-label">Live field data</h1>
+          <div class="focus-value" id="focus-value">--</div>
+          <div class="focus-sub" id="focus-sub">Pick a reading on the right.</div>
         </div>
-        <span class="status" id="status" role="status">Waiting for device</span>
-        <a class="btn quiet" id="csv" href="/api/export.csv?source=blynk" download>Download CSV</a>
+        <div class="range" role="group" aria-label="Time range">
+          <button type="button" data-range="900000" aria-pressed="true">15 min</button>
+          <button type="button" data-range="3600000" aria-pressed="false">1 h</button>
+          <button type="button" data-range="0" aria-pressed="false">All</button>
+        </div>
       </div>
-    </div>
+      <div class="chart-box"><canvas id="chart" aria-label="Chart of the selected reading over time"></canvas></div>
+    </section>
 
-    <div class="cards" id="cards"></div>
-    <div class="empty" id="empty" hidden></div>
+    <aside class="watch" aria-labelledby="watch-title">
+      <h2 id="watch-title">Readings</h2>
+      <div class="cards" id="cards"></div>
+    </aside>
 
-    <div id="view" hidden>
-      <div class="view-bar">
-        <label for="chart-key">Showing</label>
-        <select id="chart-key"></select>
-        <select id="chart-range" aria-label="Time range">
-          <option value="900000">Last 15 min</option>
-          <option value="3600000">Last 1 h</option>
-          <option value="0">All</option>
-        </select>
+    <section class="where" aria-labelledby="map-title">
+      <div class="where-head">
+        <h2 id="map-title">Where it was measured</h2>
+        <span class="note" id="gps-meta"></span>
       </div>
-
-      <div class="view-grid">
-        <section class="panel map-panel">
-          <div class="panel-head">
-            <h2>Where it was measured</h2>
-            <span class="note" id="gps-meta"></span>
-          </div>
-          <p class="note" id="no-gps">No GPS fix yet. Points appear here once the GPS module locks on, which needs open sky.</p>
-          <div id="map" hidden></div>
-          <div class="legend" id="legend" hidden>
-            <span id="legend-min"></span><span class="ramp" id="legend-ramp"></span><span id="legend-max"></span>
-          </div>
-        </section>
-
-        <section class="panel chart-panel">
-          <div class="panel-head"><h2>Over time</h2></div>
-          <div class="chart-box"><canvas id="chart"></canvas></div>
-        </section>
+      <p class="note" id="no-gps">No GPS fix yet. Points appear here once the GPS module locks on, which needs open sky.</p>
+      <div id="map" hidden></div>
+      <div class="legend" id="legend" hidden>
+        <span id="legend-min"></span><span class="ramp" id="legend-ramp"></span><span id="legend-max"></span>
       </div>
-    </div>
-
-    <p class="dash-foot">Blynk Cloud works from any network. Local Wi-Fi reads straight from the ESP32 and needs it on the same network as this server.
-      Soil is an estimated moisture level that needs calibration. Gas is the raw sensor level, not ppm.</p>
+    </section>
   </main>
+
+  <p class="desk-foot">Blynk Cloud works from any network. Local Wi-Fi reads straight from the ESP32 and needs it on the same
+    network as this server. Soil is an estimated moisture level that needs calibration. Gas is the raw sensor level, not ppm.</p>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
