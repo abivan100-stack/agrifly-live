@@ -47,10 +47,9 @@
   };
   const CYCLE = { light: ['#3e7f6f', '#2f7f9e', '#8a6234', '#5a6fb0', '#8a5a9e', '#c0392b'],
     dark: ['#6fbfa9', '#5fb3d6', '#c9a06a', '#8fa3e0', '#c09ad6', '#ef7d6e'] };
-  const darkScheme = matchMedia('(prefers-color-scheme: dark)');
   const colorOf = (key) => {
     if (isBinary(key)) return css('--amber');
-    const mode = darkScheme.matches ? 'dark' : 'light';
+    const mode = document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light';
     return SERIES[mode][key] || CYCLE[mode][[...key].reduce((a, ch) => a + ch.charCodeAt(0), 0) % CYCLE[mode].length];
   };
 
@@ -702,8 +701,8 @@
   $('csv').addEventListener('click', (e) => { if (cloud) { e.preventDefault(); downloadCsv(); } });
   document.addEventListener('visibilitychange', () => { if (cloud && document.visibilityState === 'visible') startPolling(); });
   window.addEventListener('pagehide', saveNow);
-  // theme switched while open: recolour cards, and rebuild the chart (it caches its colours)
-  darkScheme.addEventListener('change', () => {
+  // theme switched while open (toggle or system): recolour cards, and rebuild the chart (it caches its colours)
+  addEventListener('themechange', () => {
     for (const [key, c] of cards) { c.el.style.setProperty('--series', colorOf(key)); updateCard(key); }
     chart?.destroy(); chart = null; chartKind = null;
     updateChart();

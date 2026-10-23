@@ -53,32 +53,31 @@
   --font: var(--body);
   color-scheme: light;
 }
-@media (prefers-color-scheme: dark) {
-  :root {
-    --paper: #12231f;
-    --surface: #182c27;
-    --ink: #e6f2dd;
-    --muted: #a9c4b5;
-    --rule: #2c463f;
-    --field: #88bda4;
-    --field-strong: #88bda4;
-    --on-field: #12231f;
-    --field-soft: #1f3a33;
-    --station: #0c1916;
-    --live: #88bda4;
-    --bad: #f2a08f;
-    --g50: #1b302a;
-    --g100: #1f3a33;
-    --g200: #2c463f;
-    --g300: #3d5d54;
-    --g700: #b1d3b9;
-    --amber: #f0b95a;
-    --amber-strong: #f0b95a;
-    --amber-soft: #3a2e17;
-    --on-amber: #2a1b03;
-    --gold: #d6b560;
-    color-scheme: dark;
-  }
+/* dark theme: set on <html data-theme> by the toggle, or from the system setting until one is chosen */
+:root[data-theme="dark"] {
+  --paper: #12231f;
+  --surface: #182c27;
+  --ink: #e6f2dd;
+  --muted: #a9c4b5;
+  --rule: #2c463f;
+  --field: #88bda4;
+  --field-strong: #88bda4;
+  --on-field: #12231f;
+  --field-soft: #1f3a33;
+  --station: #0c1916;
+  --live: #88bda4;
+  --bad: #f2a08f;
+  --g50: #1b302a;
+  --g100: #1f3a33;
+  --g200: #2c463f;
+  --g300: #3d5d54;
+  --g700: #b1d3b9;
+  --amber: #f0b95a;
+  --amber-strong: #f0b95a;
+  --amber-soft: #3a2e17;
+  --on-amber: #2a1b03;
+  --gold: #d6b560;
+  color-scheme: dark;
 }
 
 * { box-sizing: border-box; }
@@ -107,6 +106,18 @@ a { color: inherit; }
 .btn:hover { background: var(--ink); border-color: var(--ink); color: var(--paper); }
 .btn.quiet { background: transparent; color: var(--ink); border-color: color-mix(in srgb, var(--ink) 30%, transparent); }
 .btn.quiet:hover { border-color: var(--ink); }
+
+/* light/dark switch: shows a moon in light mode (go dark) and a sun in dark mode (go light) */
+.theme-toggle {
+  display: inline-grid; place-items: center; flex: none; width: 40px; height: 40px; padding: 0; border-radius: 4px;
+  border: 1px solid color-mix(in srgb, currentColor 35%, transparent); background: transparent; color: inherit; cursor: pointer;
+}
+.theme-toggle:hover { border-color: currentColor; }
+.theme-toggle svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.theme-toggle .sun, :root[data-theme="dark"] .theme-toggle .moon { display: none; }
+:root[data-theme="dark"] .theme-toggle .sun { display: block; }
+.top-actions { display: flex; align-items: center; gap: 10px; }
+.desk-bar .theme-toggle { width: 38px; height: 38px; color: var(--on-dark); }
 
 /* segmented controls: source, camera mode, chart range */
 .modes, .range { display: inline-flex; padding: 3px; gap: 2px; border-radius: 6px; border: 1px solid var(--rule); background: var(--surface); }
@@ -465,7 +476,7 @@ a { color: inherit; }
   margin: 0; padding: 0 16px; text-align: center; text-wrap: balance; color: var(--muted); font-size: .95rem; line-height: 1.5; pointer-events: none;
 }
 #map .leaflet-tile-pane { filter: grayscale(1) contrast(.85) brightness(1.06); }
-@media (prefers-color-scheme: dark) { #map .leaflet-tile-pane { filter: grayscale(1) invert(.88) contrast(.85); } }
+:root[data-theme="dark"] #map .leaflet-tile-pane { filter: grayscale(1) invert(.88) contrast(.85); }
 .legend { display: flex; align-items: center; gap: 10px; margin-top: 10px; font-size: .85rem; color: var(--muted); }
 .legend .ramp { flex: 1; max-width: 240px; height: 8px; border-radius: 4px; }
 .note { color: var(--muted); font-size: .92rem; }

@@ -1,4 +1,29 @@
 // Shared helpers for both pages.
+
+// Light/dark theme. The inline script in <head> sets data-theme before first paint; this wires the toggle button,
+// remembers the choice, and follows the system setting until the visitor picks one. Fires "themechange" on window.
+(() => {
+  const KEY = 'agrifly-theme';
+  const root = document.documentElement;
+  const system = matchMedia('(prefers-color-scheme: dark)');
+  const saved = () => { try { return localStorage.getItem(KEY); } catch { return null; } };
+  const apply = (theme) => {
+    root.dataset.theme = theme;
+    const label = theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme';
+    for (const b of document.querySelectorAll('.theme-toggle')) { b.setAttribute('aria-label', label); b.title = label; }
+    dispatchEvent(new Event('themechange'));
+  };
+  const sync = () => apply(saved() || (system.matches ? 'dark' : 'light'));
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', sync); else sync();
+  system.addEventListener('change', () => { if (!saved()) sync(); });
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.theme-toggle')) return;
+    const next = root.dataset.theme === 'dark' ? 'light' : 'dark';
+    try { localStorage.setItem(KEY, next); } catch { /* storage blocked: still switches for this visit */ }
+    apply(next);
+  });
+})();
+
 window.AgriFly = {
   // "gas_raw" -> "Gas raw", "soilMoisture" -> "Soil moisture", "co2" -> "CO2"
   prettify(key) {
