@@ -29,13 +29,17 @@
         <div class="meta" id="meta">Connecting...</div>
       </div>
       <div class="right">
+        <div class="modes" role="group" aria-label="Data source">
+          <button type="button" data-source="blynk" aria-pressed="true">Blynk Cloud</button>
+          <button type="button" data-source="local" aria-pressed="false">Local Wi-Fi</button>
+        </div>
         <span class="status" id="status" role="status">Waiting for device</span>
-        <a class="btn quiet" href="/api/export.csv" download>Download CSV</a>
+        <a class="btn quiet" id="csv" href="/api/export.csv?source=blynk" download>Download CSV</a>
       </div>
     </div>
 
     <div class="cards" id="cards"></div>
-    <div class="empty" id="empty">No readings yet. Power on the ESP32, or run <code>npm run simulate</code> on the laptop to send test data.</div>
+    <div class="empty" id="empty" hidden></div>
 
     <div id="view" hidden>
       <div class="view-bar">
@@ -68,7 +72,8 @@
       </div>
     </div>
 
-    <p class="dash-foot">Soil is an estimated moisture level that needs calibration. Gas is the raw sensor level, not ppm.</p>
+    <p class="dash-foot">Blynk Cloud works from any network. Local Wi-Fi needs the ESP32 and this computer on the same network.
+      Soil is an estimated moisture level that needs calibration. Gas is the raw sensor level, not ppm.</p>
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>

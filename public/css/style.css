@@ -268,3 +268,15 @@ select:hover { border-color: var(--muted); }
   .controls .keys { display: none; }
 }
 .feed-wrap:has(#controls[hidden]) .feed { border-radius: 10px; }
+
+/* binary sensors (e.g. IR): a big coloured state instead of a number */
+.card .state { display: inline-block; margin-top: 8px; padding: 5px 10px; border-radius: 6px; font-weight: 700; font-size: 1.15rem; line-height: 1.3; }
+.card .state.on { background: var(--field); color: #fff; }
+.card .state.off { background: var(--paper); color: var(--muted); box-shadow: inset 0 0 0 1px var(--rule); }
+.card .detections { font-size: .8rem; color: var(--muted); }
+.empty { margin-top: 12px; }
+.dash-head .modes { flex: none; }
+.card { display: flex; flex-direction: column; justify-content: flex-start; }
+.card .state { align-self: flex-start; }
+.card.binary { grid-column: span 2; }
+@media (max-width: 420px) { .card.binary { grid-column: auto; } }

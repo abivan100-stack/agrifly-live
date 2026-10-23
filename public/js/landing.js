@@ -8,7 +8,7 @@
   const OFFLINE_AFTER_MS = 10000;
   const ROW_M = 0.75;                 // crop row spacing in metres
   const CENTER = { lat: 13.0827, lon: 80.2707 };
-  const SHORT = { temperature: 'TEMP', humidity: 'HUM', pressure: 'PRES', light: 'LUX', soil: 'SOIL', gas_raw: 'GAS' };
+  const SHORT = { ir: 'IR', temperature: 'TEMP', humidity: 'HUM', pressure: 'PRES', light: 'LUX', soil: 'SOIL', gas_raw: 'GAS' };
   const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   let mode = 'demo', userChose = false, live = null; // live = { record, age }
@@ -43,11 +43,16 @@
   const fmt = (v) => AgriFly.format(v);
   const latLon = (g) => [`${Math.abs(g.lat).toFixed(5)} ${g.lat >= 0 ? 'N' : 'S'}`, `${Math.abs(g.lon).toFixed(5)} ${g.lon >= 0 ? 'E' : 'W'}`];
 
+  let sensors = []; // config/sensors.json, for labels and on/off text of binary sensors
+  fetch('/api/sensors').then((r) => r.json()).then((s) => { sensors = s; }).catch(() => {});
+
   function readingRows(readings) {
     return Object.entries(readings).slice(0, 4).map(([key, { value, unit }]) => {
+      const s = sensors.find((x) => x.key === key);
+      const text = s?.type === 'binary' ? (value ? s.onText || 'ON' : s.offText || 'OFF') : `${fmt(value)} ${unit}`.trim();
       const row = document.createElement('div');
-      const span = (text) => Object.assign(document.createElement('span'), { textContent: text });
-      row.append(span(SHORT[key] || key.replace(/_/g, ' ').slice(0, 5)), span(`${fmt(value)} ${unit}`.trim()));
+      const span = (t) => Object.assign(document.createElement('span'), { textContent: t });
+      row.append(span(SHORT[key] || key.replace(/_/g, ' ').slice(0, 5)), span(text));
       return row;
     });
   }
@@ -82,7 +87,7 @@
       return;
     }
     const r = live.record;
-    $('osd-device').textContent = r.device;
+    $('osd-device').textContent = r.source === 'blynk' ? 'BLYNK CLOUD' : r.device;
     $('osd-time').textContent = new Date(r.t).toLocaleTimeString([], { hour12: false });
     if (live.age > OFFLINE_AFTER_MS) {
       setLink('NO LINK', false);
@@ -176,9 +181,11 @@
   }
 
   async function poll() {
+    // Blynk Cloud first, local Wi-Fi as well; show whichever has the newer reading
     try {
-      const data = await (await fetch('/api/latest', { cache: 'no-store' })).json();
-      live = data.latest ? { record: data.latest, age: data.now - data.latest.t } : null;
+      const both = await Promise.all(['blynk', 'local'].map((s) => fetch(`/api/latest?source=${s}`, { cache: 'no-store' }).then((r) => r.json())));
+      const best = both.filter((d) => d.latest).sort((a, b) => b.latest.t - a.latest.t)[0];
+      live = best ? { record: best.latest, age: best.now - best.latest.t } : null;
     } catch {
       live = null;
     }

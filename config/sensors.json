@@ -1,0 +1,4 @@
+[
+  { "key": "ir", "blynkPin": "v0", "label": "IR Sensor", "unit": "", "type": "binary",
+    "onText": "Object detected", "offText": "Clear" }
+]
