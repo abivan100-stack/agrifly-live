@@ -441,7 +441,7 @@ a { color: inherit; }
 .card .value small { font-weight: 400; font-size: .82rem; color: var(--muted); margin-left: 3px; }
 .card .state { font-weight: 600; font-size: .85rem; padding: 2px 8px; border-radius: 3px; }
 .card .state.on { background: var(--amber); color: var(--on-amber); }
-.card .state.off { color: var(--g600); background: var(--g50); box-shadow: inset 0 0 0 1px var(--g200); }
+.card .state.off { color: var(--g700); background: var(--g50); box-shadow: inset 0 0 0 1px var(--g200); }
 .card canvas { grid-area: spark; width: 100%; height: 26px; display: block; margin: 6px 0 2px; color: var(--series, var(--g500)); }
 .card .detections { grid-area: det; font-size: .8rem; color: var(--muted); }
 .card .ago { grid-area: ago; font-size: .78rem; color: var(--muted); }
