@@ -1,6 +1,6 @@
 # AgriFly
 
-**Smarter Technology for Smarter Farming** - Team 5 (Rokith Kumaar, Deepak Kumar, Adhithya), 2026-27.
+**Smarter Technology for Smarter Farming** .
 
 AgriFly is an IoT field-monitoring system. An FPV drone carries an ESP32 with sensors and sends readings to a
 live dashboard. Right now we are testing with **one IR obstacle sensor** (1 = object detected, 0 = clear).
