@@ -445,7 +445,9 @@ a { color: inherit; }
 .card canvas { grid-area: spark; width: 100%; height: 26px; display: block; margin: 6px 0 2px; color: var(--series, var(--g500)); }
 .card .detections { grid-area: det; font-size: .8rem; color: var(--muted); }
 .card .ago { grid-area: ago; font-size: .78rem; color: var(--muted); }
-.card.stale .value, .card.stale .state { opacity: .5; }
+/* not live: muted and outlined with a dashed line, but still readable (no opacity) */
+.card.stale .value, .card.stale .value small { color: var(--muted); }
+.card.stale .state { background: none; color: var(--muted); box-shadow: none; outline: 1px dashed var(--g400); outline-offset: -1px; }
 
 .where { padding: 0 0 16px; }
 .where > :not(.where-head) { margin-inline: 18px; }
