@@ -39,6 +39,11 @@
     || { key, label: prettify(key), type: 'number', unit: records.findLast((r) => r.readings[key])?.readings[key].unit || '' };
   const isBinary = (key) => meta(key).type === 'binary';
   const stateText = (key, v) => (v ? meta(key).onText || 'On' : meta(key).offText || 'Off');
+  // each number sensor gets its own colour (line, sparkline, swatch); on/off sensors use the amber "detected" colour
+  const SERIES = { temperature: '#c0392b', humidity: '#2f7f9e', soil: '#8a6234', light: '#b88a00', pressure: '#5a6fb0', gas_raw: '#8a5a9e' };
+  const CYCLE = ['#3e7f6f', '#2f7f9e', '#8a6234', '#5a6fb0', '#8a5a9e', '#c0392b'];
+  const colorOf = (key) => (isBinary(key) ? css('--amber')
+    : SERIES[key] || CYCLE[[...key].reduce((a, ch) => a + ch.charCodeAt(0), 0) % CYCLE.length]);
 
   // ---------- source switching ----------
   function setSource(next) {
@@ -188,6 +193,7 @@
       ? '<span class="label"></span><span class="state off">No data yet</span><canvas aria-hidden="true"></canvas><span class="detections"></span><span class="ago"></span>'
       : '<span class="label"></span><span class="value"><span>--</span><small></small></span><canvas aria-hidden="true"></canvas><span class="ago">No data yet</span>';
     el.querySelector('.label').textContent = meta(key).label;
+    el.style.setProperty('--series', colorOf(key));
     el.addEventListener('click', () => select(key));
     // configured sensors first (in config order), then extra local keys alphabetically
     const order = (k) => { const i = sensors.findIndex((s) => s.key === k); return i < 0 ? 1000 : i; };
@@ -324,6 +330,7 @@
     if (!key) return;
     const binary = isBinary(key);
     $('focus').classList.toggle('binary', binary);
+    $('focus').style.setProperty('--series', colorOf(key));
     $('events-box').hidden = !binary;
     $('focus-label').textContent = meta(key).label;
     const r = records.findLast((x) => x.readings[key]);
@@ -431,7 +438,11 @@
       ]);
     } else {
       $('chart-empty').hidden = true;
-      chart.data.datasets[0].data = pts;
+      const ds = chart.data.datasets[0];
+      ds.borderColor = ds.pointBackgroundColor = ds.pointHoverBackgroundColor = colorOf(key);
+      ds.backgroundColor = `${colorOf(key)}1f`; // faint fill under the line, in the same colour
+      ds.fill = 'origin';
+      ds.data = pts;
       x.min = start; x.max = pts.at(-1).x;
       chart.update('none');
       const ys = pts.map((p) => p.y);
@@ -469,7 +480,7 @@
     const sx = (t) => left + ((Math.max(t, min) - min) / (max - min || 1)) * (right - left);
     const block = (from, to) => { const a = sx(from); ctx.fillRect(a, 0, Math.max(2, sx(to) - a), h); };
     // light track only where there is data; blank where the tab was closed or the device was offline
-    ctx.fillStyle = css('--rule');
+    ctx.fillStyle = css('--g200');
     let segStart = seed && pts[0].x - seed.x <= GAP_MS ? min : pts[0].x;
     pts.forEach((p, i) => {
       const next = pts[i + 1]?.x ?? end;
@@ -477,7 +488,7 @@
     });
     if (segStart !== undefined && end - pts.at(-1).x <= GAP_MS) block(segStart, end);
     // one solid block per "on" run, ended by an off reading or by a gap
-    ctx.fillStyle = css('--field-strong');
+    ctx.fillStyle = css('--amber');
     let runStart = seed?.y === 1 && pts[0].x - seed.x <= GAP_MS ? min : null, prevX = null;
     for (const p of pts) {
       if (runStart !== null && prevX !== null && p.x - prevX > GAP_MS) { block(runStart, prevX); runStart = null; }
@@ -496,7 +507,7 @@
     return new Chart($('chart'), {
       type: kind,
       data: { datasets: [bar
-        ? { data: [], backgroundColor: green, hoverBackgroundColor: strong, borderRadius: 2, barPercentage: 1, categoryPercentage: 0.72 }
+        ? { data: [], backgroundColor: css('--amber'), hoverBackgroundColor: css('--amber-strong'), borderRadius: 3, barPercentage: 1, categoryPercentage: 0.72 }
         : { data: [], borderColor: green, borderWidth: 2, fill: false, cubicInterpolationMode: 'monotone',
             pointRadius: (c) => (c.dataIndex === c.dataset.data.length - 1 ? 4 : 0), pointBackgroundColor: green,
             pointHoverRadius: 5, pointHoverBackgroundColor: strong }] },

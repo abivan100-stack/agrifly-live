@@ -11,6 +11,21 @@
   --sage-deep: #4a786e;     /* sage darkened so white text on it passes WCAG AA */
   --station: #17302a;       /* deep sage frame around the camera and the dashboard bar */
 
+  /* the team greens as a full scale, light to dark, so surfaces, rules and emphasis get different shades */
+  --g50: #f4f9f0;
+  --g100: var(--mist);
+  --g200: #cde3c8;
+  --g300: var(--pale);
+  --g400: var(--mint);
+  --g500: var(--sage);
+  --g600: var(--sage-deep);
+  --g700: #355b52;
+  /* harvest amber: the one non-green, reserved for "something was detected" */
+  --amber: #e8a93a;
+  --amber-strong: #94600a;  /* amber dark enough for text on light backgrounds (AA) */
+  --amber-soft: #fcefd2;
+  --on-amber: #3b2604;
+
   --paper: var(--mist);     /* page */
   --surface: #fbfdf9;       /* panels */
   --ink: #1e3a33;
@@ -50,6 +65,15 @@
     --station: #0c1916;
     --live: #88bda4;
     --bad: #f2a08f;
+    --g50: #1b302a;
+    --g100: #1f3a33;
+    --g200: #2c463f;
+    --g300: #3d5d54;
+    --g700: #b1d3b9;
+    --amber: #f0b95a;
+    --amber-strong: #f0b95a;
+    --amber-soft: #3a2e17;
+    --on-amber: #2a1b03;
     color-scheme: dark;
   }
 }
@@ -284,8 +308,9 @@ a { color: inherit; }
 
 .desk-bar {
   display: grid; grid-template-columns: auto auto 1fr auto; align-items: center; gap: 12px 28px;
-  padding: 12px 28px; background: var(--station); color: var(--on-dark);
+  padding: 12px 28px; background: var(--station); color: var(--on-dark); border-bottom: 3px solid var(--g500);
 }
+.desk-bar .modes button[aria-pressed="true"] { background: var(--g400); color: #10261f; }
 .desk-bar .brand { color: var(--on-dark); }
 .desk-status { display: flex; align-items: baseline; gap: 12px; min-width: 0; }
 .desk-status .status { color: var(--on-dark-muted); }
@@ -308,11 +333,15 @@ a { color: inherit; }
 }
 /* readings list and map share the right column, so a single sensor doesn't leave it empty */
 .side { grid-area: side; display: flex; flex-direction: column; gap: 20px; min-width: 0; }
-.focus, .watch, .where { background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; min-width: 0; }
+.focus, .watch, .where { background: var(--surface); border: 1px solid var(--g200); border-radius: 6px; min-width: 0; overflow: hidden; }
 
 .focus { grid-area: focus; padding: 22px 26px 18px; }
 .focus-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; margin-bottom: 16px; }
-.focus h1 { font-size: 1rem; color: var(--muted); }
+.focus h1 { display: flex; align-items: center; gap: 8px; font-size: 1rem; color: var(--g700); }
+/* number sensors: a swatch in the sensor's own colour, matching its line and sparkline */
+.focus h1::before { content: ""; width: 10px; height: 10px; border-radius: 2px; background: var(--series, var(--g500)); }
+.focus.binary h1::before { display: none; }
+.focus .range button[aria-pressed="true"] { background: var(--g700); color: #fff; }
 .focus-value { font-size: clamp(2.4rem, 4.6vw, 3.6rem); font-weight: 600; line-height: 1.05; letter-spacing: -.02em; margin-top: 4px; }
 .focus-value small { font-size: 1.1rem; font-weight: 400; color: var(--muted); margin-left: 6px; letter-spacing: 0; }
 .focus-value.on { color: var(--field-strong); }
@@ -322,27 +351,36 @@ a { color: inherit; }
 .focus.binary .chart-box { height: 220px; } /* counts are small numbers; the strip above carries the timeline */
 
 /* range summary: low/avg/high or detections/time on/last */
-.stats { display: flex; flex-wrap: wrap; gap: 8px 40px; margin: 0 0 18px; padding: 12px 0; border-block: 1px solid var(--rule); }
+/* tiles with a coloured edge: low -> high runs light -> dark green; for on/off, detections are amber */
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin: 0 0 20px; }
 .stats:empty { display: none; }
+.stats > div { padding: 10px 14px; border-radius: 6px; background: var(--g50); border-left: 4px solid var(--c, var(--g500)); }
+.stats > div:nth-child(1) { --c: var(--g300); }
+.stats > div:nth-child(2) { --c: var(--g500); }
+.stats > div:nth-child(3) { --c: var(--g700); }
+.focus.binary .stats > div:nth-child(1) { --c: var(--amber); background: var(--amber-soft); }
 .stats dt { font-size: .82rem; color: var(--muted); }
-.stats dd { margin: 0; font-size: 1.15rem; font-weight: 600; }
+.stats dd { margin: 2px 0 0; font-size: 1.2rem; font-weight: 600; }
 
 /* live banner for on/off sensors: light while clear, filled while detected, grey when not live */
 .focus.binary .focus-head {
   margin: -22px -26px 18px; padding: 22px 26px 20px; border-radius: 6px 6px 0 0;
-  background: var(--field-soft); border-bottom: 1px solid var(--rule); transition: background-color .3s, color .3s;
+  background: var(--g100); border-bottom: 1px solid var(--g200); transition: background-color .3s, color .3s;
 }
-.focus.binary .stats { border-top: 0; padding-top: 0; }
-.focus.binary .focus-value { display: flex; align-items: center; gap: 16px; color: var(--ink); }
-.focus.binary .dot { flex: none; width: 18px; height: 18px; border-radius: 50%; border: 3px solid var(--muted); }
-.focus.binary.is-on .focus-head { background: var(--field-strong); border-color: var(--field-strong); }
+.focus.binary .focus-value { display: flex; align-items: center; gap: 16px; color: var(--g700); }
+.focus.binary .dot { flex: none; width: 18px; height: 18px; border-radius: 50%; border: 3px solid var(--g500); background: var(--g300); }
+/* detected: the banner turns harvest amber */
+.focus.binary.is-on .focus-head { background: var(--amber); border-color: var(--amber); }
 .focus.binary.is-on .focus-head h1,
 .focus.binary.is-on .focus-value,
-.focus.binary.is-on .focus-sub { color: var(--on-field); }
-.focus.binary.is-on .dot { border-color: var(--on-field); background: var(--on-field); animation: beacon 1.6s ease-out infinite; }
+.focus.binary.is-on .focus-sub { color: var(--on-amber); }
+.focus.binary.is-on .dot { border-color: var(--on-amber); background: var(--on-amber); animation: beacon 1.6s ease-out infinite; }
+.focus.binary.is-on .range { background: color-mix(in srgb, #fff 55%, transparent); border-color: transparent; }
+.focus.binary.is-on .range button { color: var(--on-amber); }
+.focus.binary.is-on .range button[aria-pressed="true"] { background: var(--on-amber); color: var(--amber-soft); }
 @keyframes beacon {
-  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--on-field) 60%, transparent); }
-  100% { box-shadow: 0 0 0 16px color-mix(in srgb, var(--on-field) 0%, transparent); }
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--on-amber) 45%, transparent); }
+  100% { box-shadow: 0 0 0 16px color-mix(in srgb, var(--on-amber) 0%, transparent); }
 }
 .focus.flip .focus-head { animation: flip .6s ease-out; }
 @keyframes flip { from { filter: brightness(1.3); } to { filter: none; } }
@@ -356,13 +394,15 @@ a { color: inherit; }
 /* chart plus, for on/off sensors, the list of recent detections beside it */
 .chart-row { display: grid; grid-template-columns: minmax(0, 1fr); gap: 28px; }
 .focus.binary .chart-row { grid-template-columns: minmax(0, 1fr) 230px; }
-.events { padding-left: 22px; border-left: 1px solid var(--rule); }
+.events { padding-left: 22px; border-left: 1px solid var(--g200); }
 .events ol { list-style: none; margin: 0; padding: 0; }
-.events li { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--rule); font-size: .92rem; }
+.events li { display: flex; justify-content: space-between; gap: 12px; padding: 8px 10px; border-bottom: 1px solid var(--g100); font-size: .92rem; }
 .events li:last-child { border-bottom: 0; }
-.events time { font-weight: 500; }
+.events time { font-weight: 500; color: var(--g700); }
 .events li span { color: var(--muted); }
-.events li.now time, .events li.now span { color: var(--field-strong); font-weight: 600; }
+/* the detection happening right now */
+.events li.now { background: var(--amber-soft); border-radius: 4px; border-bottom-color: transparent; }
+.events li.now time, .events li.now span { color: var(--amber-strong); font-weight: 600; }
 .events li.none { color: var(--muted); }
 @media (max-width: 999px) {
   .focus.binary .focus-head { margin: -18px -18px 16px; padding: 18px; }
@@ -371,39 +411,45 @@ a { color: inherit; }
 }
 
 .chart-title { display: flex; align-items: center; gap: 8px; font-size: .85rem; font-weight: 500; color: var(--muted); margin-bottom: 6px; }
-.chart-title .swatch { width: 12px; height: 12px; border-radius: 2px; background: var(--field-strong); }
+.chart-title .swatch { width: 12px; height: 12px; border-radius: 2px; background: var(--amber); }
 .strip-box { margin-bottom: 16px; }
 #strip { display: block; width: 100%; height: 22px; }
 
-.watch { padding-bottom: 6px; }
-.watch h2 { font-size: .95rem; padding: 16px 18px 10px; }
+.watch { padding-bottom: 0; }
+/* side panel heads sit on a pale band */
+.watch h2, .where-head { background: var(--g50); border-bottom: 1px solid var(--g200); color: var(--g700); }
+.watch h2 { font-size: .95rem; padding: 13px 18px; }
 .cards { display: flex; flex-direction: column; }
 
 /* each reading is a row: name and value, a sparkline, when it last changed */
 .card {
   display: grid; grid-template-columns: 1fr auto; grid-template-areas: "label value" "spark spark" "ago ago";
   align-items: baseline; gap: 2px 12px; width: 100%; padding: 12px 18px;
-  border: 0; border-top: 1px solid var(--rule); background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer;
+  border: 0; border-top: 1px solid var(--g100); background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer;
+  box-shadow: inset 4px 0 0 transparent;
 }
+.cards .card:first-child { border-top: 0; }
 .card.binary { grid-template-areas: "label value" "spark spark" "det det" "ago ago"; }
-.card:hover { background: color-mix(in srgb, var(--field-soft) 60%, transparent); }
-.card[aria-pressed="true"] { background: var(--field-soft); }
-.card[aria-pressed="true"] .label { color: var(--ink); }
+.card:hover { background: var(--g50); }
+/* selected row: tinted, with an edge in the sensor's own colour */
+.card[aria-pressed="true"] { background: var(--g100); box-shadow: inset 4px 0 0 var(--series, var(--g500)); }
+.card[aria-pressed="true"] .label { color: var(--g700); font-weight: 600; }
 .card .label { grid-area: label; font-weight: 500; color: var(--muted); }
 .card .value, .card .state { grid-area: value; justify-self: end; }
 .card .value { font-weight: 600; font-size: 1.2rem; }
 .card .value small { font-weight: 400; font-size: .82rem; color: var(--muted); margin-left: 3px; }
 .card .state { font-weight: 600; font-size: .85rem; padding: 2px 8px; border-radius: 3px; }
-.card .state.on { background: var(--field-strong); color: var(--on-field); }
-.card .state.off { color: var(--muted); box-shadow: inset 0 0 0 1px var(--rule); }
-.card canvas { grid-area: spark; width: 100%; height: 26px; display: block; margin: 6px 0 2px; color: var(--field); }
+.card .state.on { background: var(--amber); color: var(--on-amber); }
+.card .state.off { color: var(--g600); background: var(--g50); box-shadow: inset 0 0 0 1px var(--g200); }
+.card canvas { grid-area: spark; width: 100%; height: 26px; display: block; margin: 6px 0 2px; color: var(--series, var(--g500)); }
 .card .detections { grid-area: det; font-size: .8rem; color: var(--muted); }
 .card .ago { grid-area: ago; font-size: .78rem; color: var(--muted); }
 .card.stale .value, .card.stale .state { opacity: .5; }
 
-.where { padding: 16px 18px 18px; }
-.where-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
-.where h2 { font-size: 1rem; }
+.where { padding: 0 0 16px; }
+.where > :not(.where-head) { margin-inline: 18px; }
+.where-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; padding: 13px 18px; }
+.where h2 { font-size: .95rem; }
 #map { height: 300px; border-radius: 4px; }
 .chart-empty {
   position: absolute; inset: 0 0 28px 40px; display: flex; flex-direction: column; justify-content: center; align-items: center;
