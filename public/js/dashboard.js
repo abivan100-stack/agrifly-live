@@ -40,10 +40,19 @@
   const isBinary = (key) => meta(key).type === 'binary';
   const stateText = (key, v) => (v ? meta(key).onText || 'On' : meta(key).offText || 'Off');
   // each number sensor gets its own colour (line, sparkline, swatch); on/off sensors use the amber "detected" colour
-  const SERIES = { temperature: '#c0392b', humidity: '#2f7f9e', soil: '#8a6234', light: '#b88a00', pressure: '#5a6fb0', gas_raw: '#8a5a9e' };
-  const CYCLE = ['#3e7f6f', '#2f7f9e', '#8a6234', '#5a6fb0', '#8a5a9e', '#c0392b'];
-  const colorOf = (key) => (isBinary(key) ? css('--amber')
-    : SERIES[key] || CYCLE[[...key].reduce((a, ch) => a + ch.charCodeAt(0), 0) % CYCLE.length]);
+  // light-mode hues, and lighter versions of the same hues for the dark background (all at least 3:1)
+  const SERIES = {
+    light: { temperature: '#c0392b', humidity: '#2f7f9e', soil: '#8a6234', light: '#b88a00', pressure: '#5a6fb0', gas_raw: '#8a5a9e' },
+    dark: { temperature: '#ef7d6e', humidity: '#5fb3d6', soil: '#c9a06a', light: '#e3c04f', pressure: '#8fa3e0', gas_raw: '#c09ad6' },
+  };
+  const CYCLE = { light: ['#3e7f6f', '#2f7f9e', '#8a6234', '#5a6fb0', '#8a5a9e', '#c0392b'],
+    dark: ['#6fbfa9', '#5fb3d6', '#c9a06a', '#8fa3e0', '#c09ad6', '#ef7d6e'] };
+  const darkScheme = matchMedia('(prefers-color-scheme: dark)');
+  const colorOf = (key) => {
+    if (isBinary(key)) return css('--amber');
+    const mode = darkScheme.matches ? 'dark' : 'light';
+    return SERIES[mode][key] || CYCLE[mode][[...key].reduce((a, ch) => a + ch.charCodeAt(0), 0) % CYCLE[mode].length];
+  };
 
   // ---------- source switching ----------
   function setSource(next) {
@@ -693,6 +702,12 @@
   $('csv').addEventListener('click', (e) => { if (cloud) { e.preventDefault(); downloadCsv(); } });
   document.addEventListener('visibilitychange', () => { if (cloud && document.visibilityState === 'visible') startPolling(); });
   window.addEventListener('pagehide', saveNow);
+  // theme switched while open: recolour cards, and rebuild the chart (it caches its colours)
+  darkScheme.addEventListener('change', () => {
+    for (const [key, c] of cards) { c.el.style.setProperty('--series', colorOf(key)); updateCard(key); }
+    chart?.destroy(); chart = null; chartKind = null;
+    updateChart();
+  });
 
   (async () => {
     try { sensors = await (await fetch('/api/sensors')).json(); } catch { sensors = []; }
