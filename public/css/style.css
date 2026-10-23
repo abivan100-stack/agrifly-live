@@ -366,7 +366,8 @@ a { color: inherit; }
 /* live banner for on/off sensors: light while clear, filled while detected, grey when not live */
 .focus.binary .focus-head {
   margin: -22px -26px 18px; padding: 22px 26px 20px; border-radius: 6px 6px 0 0;
-  background: var(--g100); border-bottom: 1px solid var(--g200); transition: background-color .3s, color .3s;
+  /* no colour transition: the text colour switches instantly, so a fading background would leave it unreadable */
+  background: var(--g100); border-bottom: 1px solid var(--g200);
 }
 .focus.binary .focus-value { display: flex; align-items: center; gap: 16px; color: var(--g700); }
 .focus.binary .dot { flex: none; width: 18px; height: 18px; border-radius: 50%; border: 3px solid var(--g500); background: var(--g300); }
