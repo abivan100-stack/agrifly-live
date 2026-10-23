@@ -8,7 +8,7 @@
   <link rel="icon" href="img/logo.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Big+Shoulders+Display:wght@700;800;900&family=VT323&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&family=VT323&display=swap">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -24,21 +24,17 @@
 
   <main>
     <section class="wrap intro">
-      <div>
-        <h1>AgriFly</h1>
-        <p class="tagline">Smarter technology for smarter farming</p>
-      </div>
-      <div>
-        <p class="lead">A drone flies over the field with a small sensor pack. Every few seconds it sends
-          temperature, humidity, light, soil and air readings, each tagged with its GPS position, to a live dashboard.</p>
-        <div class="actions">
-          <a class="btn" href="/dashboard">View live data</a>
-          <a class="textlink" href="#how">How it works</a>
-        </div>
+      <h1>Smarter technology for smarter farming</h1>
+      <p class="lead">AgriFly is a drone with a small sensor pack. As it flies over the field it sends temperature,
+        humidity, light, soil and air readings every few seconds, each tagged with its GPS position, to a live dashboard.</p>
+      <div class="actions">
+        <a class="btn" href="/dashboard">View live data</a>
+        <a class="btn quiet" href="#how">How it works</a>
       </div>
     </section>
 
-    <div class="wrap feed-bar">
+    <div class="feed-wrap">
+    <div class="feed-bar">
       <div class="modes" role="group" aria-label="Camera view">
         <button type="button" id="mode-live" aria-pressed="false">Live drone</button>
         <button type="button" id="mode-demo" aria-pressed="true">Fly the demo</button>
@@ -80,14 +76,15 @@
       <label class="slider">Altitude <input type="range" id="alt" min="3" max="30" step="1" value="8"><output id="alt-out">8 m</output></label>
       <span class="keys">Click the view, then <kbd>&larr;</kbd> <kbd>&rarr;</kbd> steer, <kbd>&uarr;</kbd> <kbd>&darr;</kbd> speed, <kbd>W</kbd> <kbd>S</kbd> altitude</span>
     </div>
-    <div class="wrap feed-note">
+    <div class="feed-note">
       <span id="feed-note">Demo readings are simulated. Switch to Live drone when the drone is flying.</span>
       <a class="textlink" href="/dashboard">Open the full dashboard</a>
     </div>
+    </div>
 
-    <section class="band" aria-labelledby="problems-title">
-      <div class="wrap">
-        <h2 id="problems-title">The problem, and our answer</h2>
+    <section class="wrap section" aria-labelledby="problems-title">
+        <h2 id="problems-title">Why AgriFly</h2>
+        <p class="sub">Four problems with how fields are checked today, and how AgriFly addresses each one.</p>
         <table class="compare">
           <thead><tr><th scope="col">What farmers deal with today</th><th scope="col">What AgriFly does</th></tr></thead>
           <tbody>
@@ -109,35 +106,21 @@
             </tr>
           </tbody>
         </table>
-      </div>
     </section>
 
-    <section class="wrap chain-section" id="how" aria-labelledby="how-title">
+    <section class="wrap section" id="how" aria-labelledby="how-title">
       <h2 id="how-title">How it works</h2>
-      <ol class="chain">
-        <li class="node">
-          <svg viewBox="0 0 52 52" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
-            <circle cx="12" cy="12" r="8"/><circle cx="40" cy="12" r="8"/><circle cx="12" cy="40" r="8"/><circle cx="40" cy="40" r="8"/>
-            <path d="M18 18l16 16M34 18L18 34"/><rect x="21" y="21" width="10" height="10" fill="currentColor"/>
-          </svg>
+      <p class="sub">From the field to your screen in about two seconds.</p>
+      <ol class="steps">
+        <li>
           <h3>The drone flies and the sensors read</h3>
           <p>A 5-inch FPV drone carries BME280, BH1750, soil, gas and GPS sensors.</p>
         </li>
-        <li class="wire" aria-hidden="true">every 2 s</li>
-        <li class="node">
-          <svg viewBox="0 0 52 52" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
-            <rect x="10" y="14" width="32" height="30"/><rect x="18" y="22" width="16" height="14"/>
-            <path d="M16 14V8h20v6M14 44v4M22 44v4M30 44v4M38 44v4"/><path d="M22 4c2.5-2 5.5-2 8 0"/>
-          </svg>
+        <li>
           <h3>The ESP32 sends over Wi-Fi</h3>
-          <p>It posts the readings and its position to the laptop server.</p>
+          <p>Every 2 seconds it posts the readings and its position to the laptop server.</p>
         </li>
-        <li class="wire" aria-hidden="true">live push</li>
-        <li class="node">
-          <svg viewBox="0 0 52 52" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
-            <rect x="4" y="10" width="32" height="22"/><path d="M0 38h40"/><rect x="38" y="18" width="12" height="22" rx="2"/>
-            <path d="M9 26l7-6 6 4 8-8"/>
-          </svg>
+        <li>
           <h3>The dashboard updates live</h3>
           <p>Cards, charts and a map update on any laptop or phone on the same network.</p>
         </li>
