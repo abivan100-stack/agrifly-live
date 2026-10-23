@@ -48,6 +48,7 @@
     $('chart-key').value = key;
     updateChart();
     recolorMap();
+    for (const k of cards.keys()) updateCard(k); // redraw sparklines in the new card colours
   }
 
   // ---------- cards ----------
@@ -107,7 +108,7 @@
       const y = h - 3 - ((v - min) / span) * (h - 6);
       i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
     });
-    ctx.strokeStyle = css('--green');
+    ctx.strokeStyle = getComputedStyle(canvas).color; // follows the card, so it inverts when selected
     ctx.lineWidth = 1.6;
     ctx.lineJoin = 'round';
     ctx.stroke();
@@ -151,8 +152,8 @@
   }
 
   function makeChart() {
-    const text = css('--muted'), grid = css('--line'), green = css('--green');
-    Chart.defaults.font.family = css('--font');
+    const text = css('--muted'), grid = css('--rule'), green = css('--field');
+    Chart.defaults.font.family = css('--body');
     return new Chart($('chart'), {
       type: 'line',
       data: { datasets: [{ data: [], borderColor: green, backgroundColor: green + '22', fill: true, pointRadius: 0, borderWidth: 2, cubicInterpolationMode: 'monotone' }] },
@@ -194,11 +195,11 @@
     }
     track.addLatLng(ll);
     const summary = Object.entries(r.readings).map(([k, v]) => `${prettify(k)}: ${format(v.value)} ${v.unit}`).join('<br>');
-    const marker = L.circleMarker(ll, { radius: 6, color: css('--text'), weight: 1, fillOpacity: 0.95 })
+    const marker = L.circleMarker(ll, { radius: 6, color: css('--ink'), weight: 1, fillOpacity: 0.95 })
       .bindTooltip(`<b>${new Date(r.t).toLocaleTimeString()}</b><br>${summary}`)
       .addTo(points);
     markers.push({ marker, r });
-    if (!lastMarker) lastMarker = L.circleMarker(ll, { radius: 11, color: css('--text'), weight: 3, fill: false, interactive: false }).addTo(map);
+    if (!lastMarker) lastMarker = L.circleMarker(ll, { radius: 11, color: css('--ink'), weight: 3, fill: false, interactive: false }).addTo(map);
     lastMarker.setLatLng(ll);
     if (live && !map.getBounds().pad(-0.1).contains(ll)) map.panTo(ll);
     $('gps-meta').textContent = `${r.gps.lat.toFixed(5)}, ${r.gps.lon.toFixed(5)}`;
@@ -256,13 +257,13 @@
     const r = last();
     const now = serverNow();
     if (!r) {
-      pill.className = 'pill';
+      pill.className = 'status';
       pill.textContent = 'Waiting for device';
     } else if (now - r.t <= 3 * expectedInterval()) {
-      pill.className = 'pill live';
+      pill.className = 'status live';
       pill.textContent = 'Live';
     } else {
-      pill.className = 'pill offline';
+      pill.className = 'status offline';
       pill.textContent = `Offline — last data ${ago(now - r.t)}`;
     }
     $('meta').textContent = !streamOk

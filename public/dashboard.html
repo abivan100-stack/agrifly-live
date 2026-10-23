@@ -7,14 +7,14 @@
   <link rel="icon" href="img/logo.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Big+Shoulders+Display:wght@700;800;900&display=swap">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
   <header class="topbar">
     <div class="wrap">
-      <a class="brand" href="/"><img src="img/logo.svg" alt="" width="26" height="26">AgriFly</a>
+      <a class="brand" href="/"><img src="img/logo.svg" alt="" width="28" height="28">AgriFly</a>
       <nav>
         <a href="/">Home</a>
         <a href="/dashboard" aria-current="page">Live data</a>
@@ -29,8 +29,8 @@
         <div class="meta" id="meta">Connecting...</div>
       </div>
       <div class="right">
-        <span class="pill" id="status" role="status">Waiting for device</span>
-        <a class="btn ghost" href="/api/export.csv" download>Download CSV</a>
+        <span class="status" id="status" role="status">Waiting for device</span>
+        <a class="btn quiet" href="/api/export.csv" download>Download CSV</a>
       </div>
     </div>
 

@@ -1,50 +1,57 @@
-// Landing hero: puts the latest readings on the field pins. Polls /api/latest.
+// Landing hero: renders the latest reading as a Betaflight-style OSD. Polls /api/latest.
 (() => {
-  const pins = [...document.querySelectorAll('.pin')];
-  const dot = document.getElementById('field-dot');
-  const status = document.getElementById('field-status');
+  const $ = (id) => document.getElementById(id);
   const OFFLINE_AFTER_MS = 10000;
+  const MAX_ROWS = 4;
+  // short OSD labels for the usual sensors; anything else gets its key, cut to fit
+  const SHORT = { temperature: 'TEMP', humidity: 'HUM', pressure: 'PRES', light: 'LUX', soil: 'SOIL', gas_raw: 'GAS' };
 
-  if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
-    document.querySelector('#field-map svg').pauseAnimations();
-  }
+  const osdNumber = (v) => AgriFly.format(v);
+  const clock = (t) => new Date(t).toLocaleTimeString([], { hour12: false });
 
   async function refresh() {
     let data;
     try {
       data = await (await fetch('/api/latest', { cache: 'no-store' })).json();
     } catch {
-      return showIdle('Server unreachable. Check that the laptop server is running.');
+      return offline('NO SERVER', 'START THE LAPTOP SERVER');
     }
     const r = data.latest;
-    if (!r) return showIdle('Device offline. No readings received yet.');
+    if (!r) return offline('NO SIGNAL', 'WAITING FOR THE DRONE');
     const age = data.now - r.t;
-    if (age > OFFLINE_AFTER_MS) return showIdle(`Device offline. Last reading ${AgriFly.ago(age)}.`);
+    $('osd-device').textContent = r.device;
+    $('osd-time').textContent = clock(r.t);
+    if (age > OFFLINE_AFTER_MS) return offline('DEVICE OFFLINE', `LAST DATA ${AgriFly.ago(age)}`);
 
-    const entries = Object.entries(r.readings).slice(0, pins.length);
-    pins.forEach((pin, i) => {
-      const [key, reading] = entries[i] || [];
-      pin.hidden = !key;
-      if (!key) return;
-      pin.classList.remove('idle');
-      pin.querySelector('b').textContent = `${AgriFly.format(reading.value)} ${reading.unit}`.trim();
-      pin.querySelector('.tag span').textContent = AgriFly.prettify(key);
+    $('osd-link').textContent = 'LINK OK';
+    $('osd-link').className = 'link-ok';
+    $('osd-alert').hidden = true;
+    const rows = Object.entries(r.readings).slice(0, MAX_ROWS).map(([key, { value, unit }]) => {
+      const row = document.createElement('div');
+      const label = document.createElement('span');
+      label.textContent = SHORT[key] || key.replace(/_/g, ' ').slice(0, 5);
+      const val = document.createElement('span');
+      val.textContent = `${osdNumber(value)} ${unit}`.trim();
+      row.append(label, val);
+      return row;
     });
-    dot.classList.add('live');
-    status.textContent = `Live from the field, updated ${AgriFly.ago(age)}`;
+    $('osd-readings').replaceChildren(...rows);
+    $('osd-gps').innerHTML = '';
+    $('osd-gps').append(...(r.gps
+      ? [`${Math.abs(r.gps.lat).toFixed(5)} ${r.gps.lat >= 0 ? 'N' : 'S'}`, `${Math.abs(r.gps.lon).toFixed(5)} ${r.gps.lon >= 0 ? 'E' : 'W'}`]
+      : ['NO GPS FIX']).map((line) => Object.assign(document.createElement('div'), { textContent: line })));
   }
 
-  function showIdle(text) {
-    for (const pin of pins) {
-      pin.hidden = false;
-      pin.classList.add('idle');
-      pin.querySelector('b').textContent = '--';
-      pin.querySelector('.tag span').textContent = 'offline';
-    }
-    dot.classList.remove('live');
-    status.textContent = text;
+  function offline(title, detail) {
+    $('osd-link').textContent = 'NO LINK';
+    $('osd-link').className = 'link-lost';
+    $('osd-alert').hidden = false;
+    $('osd-alert').firstChild.textContent = title;
+    $('osd-alert').querySelector('small').textContent = detail;
+    $('osd-readings').replaceChildren();
+    $('osd-gps').replaceChildren();
   }
 
   refresh();
-  setInterval(refresh, 3000);
+  setInterval(refresh, 2000);
 })();
