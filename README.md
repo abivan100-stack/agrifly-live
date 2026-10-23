@@ -54,6 +54,32 @@ Put `ESP_HOST=localhost:8080` in `.env`, restart `npm start`, and choose **Local
 New sensor cards appear by themselves. `npm run simulate` without `--all` serves the IR sensor only.
 `npm test` runs a self-check against a fake Blynk server and a fake ESP32.
 
+## Two ways to run
+
+The same code runs in both places. The server checks `process.env.VERCEL` and the pages ask `/api/config`,
+so nothing needs switching by hand.
+
+| | Local (`npm start` on a laptop) | Vercel (public link) |
+|---|---|---|
+| Sources | Blynk Cloud **and** Local Wi-Fi | Blynk Cloud only (Local Wi-Fi button is disabled) |
+| Live updates | Server-Sent Events from the server | The page polls `/api/latest` every 3 s, paused while the tab is hidden |
+| History | `data/readings.jsonl` on the laptop | Kept in the browser tab only (last ~2000 readings) |
+| Download CSV | Built by the server | Built in the browser from what the tab has seen |
+| Env vars | `.env`: `BLYNK_TOKEN`, `BLYNK_SERVER`, optional `BLYNK_POLL_MS`, `ESP_HOST`, `LOCAL_POLL_MS`, `PORT` | Vercel project settings: `BLYNK_TOKEN` (required), `BLYNK_SERVER` (defaults to `blr1.blynk.cloud`), optional `BLYNK_POLL_MS` |
+
+**Why Local Wi-Fi can't work on Vercel:** Local mode means the server asks the ESP32 directly at an address like
+`192.168.1.25`. That address only exists inside your home or hotspot network. Vercel runs in a data centre on the
+internet, so it can't reach a device behind your router. Blynk Cloud works because the ESP32 sends its readings
+out to Blynk, and Vercel reads them from there.
+
+**Blynk quota on Vercel:** `/api/latest` answers with `Cache-Control: public, s-maxage=3, stale-while-revalidate=10`,
+so Vercel's CDN shares one answer between all viewers for 3 s, and the function also caches for 3 s. Ten open tabs
+cost about the same Blynk requests as one. The "is the device online" check runs at most every 12 s.
+
+**Set the variables on Vercel:** Vercel dashboard, then your project, then **Settings > Environment Variables**.
+Add them for **Production** (and **Preview** if you use preview links), then **redeploy**: changes to variables
+only apply to new deployments. The project is linked to GitHub, so a push to `main` also deploys.
+
 ## Blynk setup
 
 In the Blynk console, the template needs two datastreams:
@@ -130,7 +156,9 @@ Any other key the ESP32 returns from `/data` also gets a card automatically in L
 ## Project layout
 
 ```
-server.js                     Express server: Blynk + ESP32 pollers (on demand), SSE, JSONL storage
+server.js                     Express server: Blynk + ESP32 pollers (on demand), SSE, JSONL storage; Blynk-only on Vercel
+lib/blynk.js                  Blynk Cloud API calls (shared by both modes), 3 s cached snapshot for Vercel
+lib/sensors.js                config/sensors.json + reading/GPS validation
 config/sensors.json           Sensor list: key, Blynk pin, label, unit, binary/number
 public/                       Landing page and dashboard (plain HTML/CSS/JS, Chart.js + Leaflet from CDN)
 firmware/agrifly_esp32/       ESP32 sketch + secrets.example.h

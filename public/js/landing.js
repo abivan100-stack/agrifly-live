@@ -12,6 +12,7 @@
   const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   let mode = 'demo', userChose = false, live = null; // live = { record, age }
+  let cloud = false, pollMs = 2000; // on Vercel: Blynk only, no SSE, pause while the tab is hidden
   const fly = { x: 0, y: 0, steer: 0, speed: reduceMotion ? 0 : 5, alt: 8, trail: [] };
 
   // ---------- simulated field: smooth dry/wet zones ----------
@@ -158,7 +159,7 @@
   let watch = null;
   function setMode(next, byUser) {
     mode = next;
-    if (mode === 'live' && !watch) {
+    if (mode === 'live' && !watch && !cloud) {
       watch = new EventSource('/api/stream?source=blynk');
       watch.onmessage = () => poll();
     } else if (mode === 'demo' && watch) {
@@ -183,7 +184,7 @@
     const droneLive = live && live.age <= OFFLINE_AFTER_MS;
     $('mode-hint').textContent = mode === 'demo'
       ? (droneLive ? 'The drone is sending data now. Switch to Live drone to see it.' : 'Steer over the field and watch the readings change by zone.')
-      : (droneLive ? 'Showing the real drone, updated every 2 seconds.' : 'The drone is not sending data. Fly the demo instead.');
+      : (droneLive ? `Showing the real drone, updated every ${pollMs / 1000} seconds.` : 'The drone is not sending data. Fly the demo instead.');
     $('feed-note').textContent = mode === 'demo'
       ? 'Demo readings are simulated from a made-up field. Real readings appear in Live drone mode.'
       : 'Real readings from the drone, drawn like the pilot’s on-screen display.';
@@ -200,11 +201,15 @@
   }
 
   async function poll() {
-    // Blynk Cloud first, local Wi-Fi as well; show whichever has the newer reading
+    if (cloud && document.visibilityState !== 'visible') return; // save Blynk quota
+    // Blynk Cloud first, local Wi-Fi as well (only with npm start); show whichever has the newer reading
     try {
-      const both = await Promise.all(['blynk', 'local'].map((s) => fetch(`/api/latest?source=${s}`, { cache: 'no-store' }).then((r) => r.json())));
+      const sources = cloud ? ['blynk'] : ['blynk', 'local'];
+      // on Vercel the response is CDN-cached, so let the browser cache rules apply instead of forcing no-store
+      const both = await Promise.all(sources.map((s) => fetch(`/api/latest?source=${s}`, cloud ? {} : { cache: 'no-store' }).then((r) => r.json())));
       const best = both.filter((d) => d.latest).sort((a, b) => b.latest.t - a.latest.t)[0];
-      live = best ? { record: best.latest, age: best.now - best.latest.t } : null;
+      // a cached response carries an old `now`, so on Vercel age is measured with this device's clock
+      live = best ? { record: best.latest, age: (cloud ? Date.now() : best.now) - best.latest.t } : null;
     } catch {
       live = null;
     }
@@ -292,7 +297,12 @@
   });
 
   setMode('demo', false);
-  poll();
-  setInterval(poll, 2000);
   requestAnimationFrame(frame);
+  fetch('/api/config').then((r) => r.json()).then((c) => {
+    cloud = c.deployment === 'vercel';
+    if (cloud) pollMs = c.pollMs || 3000;
+  }).catch(() => { /* older server: behave as local */ }).finally(() => {
+    poll();
+    setInterval(poll, pollMs);
+  });
 })();

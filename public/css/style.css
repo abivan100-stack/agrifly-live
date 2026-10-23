@@ -89,6 +89,8 @@ a { color: inherit; }
 }
 .modes button:hover, .range button:hover { color: var(--ink); }
 .modes button[aria-pressed="true"], .range button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+.modes button:disabled { opacity: .45; cursor: not-allowed; }
+.modes button:disabled:hover { color: inherit; }
 
 /* the same controls on the deep-sage frame */
 .on-dark .modes, .cockpit .modes, .desk-bar .modes { background: rgba(230, 242, 221, .06); border-color: rgba(230, 242, 221, .2); }
@@ -405,6 +407,7 @@ a { color: inherit; }
 .legend { display: flex; align-items: center; gap: 10px; margin-top: 10px; font-size: .85rem; color: var(--muted); }
 .legend .ramp { flex: 1; max-width: 240px; height: 8px; border-radius: 4px; }
 .note { color: var(--muted); font-size: .92rem; }
+#local-note { padding-bottom: 0; color: var(--ink); }
 .desk-foot { padding: 20px 28px 32px; color: var(--muted); font-size: .85rem; max-width: 70em; }
 
 @media (max-width: 999px) {

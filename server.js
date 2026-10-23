@@ -1,19 +1,20 @@
-// AgriFly server. Two data sources feed one store, and each is polled ONLY while a dashboard watches it:
-//   blynk - read from Blynk Cloud's HTTPS API (while a source=blynk stream is open)
-//   local - read from the ESP32's own web server, GET http://<esp>/data (while a source=local stream is open)
-// Browsers get live updates over Server-Sent Events. No dashboard open = no polling at all.
+// AgriFly server. Runs two ways from the same code:
+//   Local (npm start): two sources feed one store, each polled ONLY while a dashboard watches it, live over SSE.
+//     blynk - read from Blynk Cloud's HTTPS API (while a source=blynk stream is open)
+//     local - read from the ESP32's own web server, GET http://<esp>/data (while a source=local stream is open)
+//   Vercel (process.env.VERCEL): Blynk only. No listen, no pollers, no files, no SSE; browsers poll /api/latest,
+//     which reads Blynk on demand behind a 3 s cache (in this module and on Vercel's CDN).
 const express = require('express');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { BLYNK_PINS, publicSensors, normalizeReadings, normalizeGps } = require('./lib/sensors');
+const { createBlynk } = require('./lib/blynk');
 
 try { process.loadEnvFile(); } catch { /* no .env file: use defaults */ }
 
+const IS_VERCEL = Boolean(process.env.VERCEL);
 const PORT = Number(process.env.PORT) || 3000;
-const BLYNK_TOKEN = (process.env.BLYNK_TOKEN || '').trim();
-const BLYNK_SERVER = (process.env.BLYNK_SERVER || 'blr1.blynk.cloud').replace(/\/+$/, '');
-// a bare host means https; a full http:// URL is allowed so tools/smoke-test.js can use a fake Blynk
-const BLYNK_BASE = /^https?:\/\//.test(BLYNK_SERVER) ? BLYNK_SERVER : `https://${BLYNK_SERVER}`;
 const BLYNK_POLL_MS = Math.max(1000, Number(process.env.BLYNK_POLL_MS) || 3000);
 const ESP_HOST = (process.env.ESP_HOST || '').trim().replace(/^https?:\/\//, '').replace(/\/+$/, '');
 const LOCAL_POLL_MS = Math.max(500, Number(process.env.LOCAL_POLL_MS) || 2000);
@@ -21,26 +22,27 @@ const ESP_IP_PIN = 'v10';          // the ESP32 writes its local IP here on ever
 const MDNS_HOST = 'agrifly.local';
 const SOURCES = ['blynk', 'local'];
 const MAX_MEMORY = 2000; // per source
-const SENSORS = JSON.parse(fs.readFileSync(path.join(__dirname, 'config', 'sensors.json'), 'utf8'));
-// On Vercel only /tmp is writable, and it is wiped when the instance is recycled.
-// ponytail: Vercel keeps data per instance only; add a shared store (e.g. Redis) if the hosted copy must keep history
-const DATA_FILE = process.env.DATA_FILE
-  || (process.env.VERCEL ? path.join(os.tmpdir(), 'readings.jsonl') : path.join(__dirname, 'data', 'readings.jsonl'));
+const DATA_FILE = process.env.DATA_FILE || path.join(__dirname, 'data', 'readings.jsonl');
+const LOCAL_ONLY = 'Available only when running on the same network (npm start).';
 
-// ---------- storage: memory per source + append-only JSONL ----------
+const blynkApi = createBlynk({ token: process.env.BLYNK_TOKEN, server: process.env.BLYNK_SERVER });
+
+// ---------- storage (local only): memory per source + append-only JSONL ----------
 const history = { blynk: [], local: [] };
-fs.mkdirSync(path.dirname(DATA_FILE), { recursive: true });
-if (fs.existsSync(DATA_FILE)) {
-  // ponytail: reads the whole file on boot; fine for a school project, rotate the file if it grows to hundreds of MB
-  for (const line of fs.readFileSync(DATA_FILE, 'utf8').split('\n')) {
-    if (!line) continue;
-    try {
-      const r = JSON.parse(line);
-      r.source = SOURCES.includes(r.source) ? r.source : 'local';
-      history[r.source].push(r);
-    } catch { /* skip a half-written line */ }
+if (!IS_VERCEL) {
+  fs.mkdirSync(path.dirname(DATA_FILE), { recursive: true });
+  if (fs.existsSync(DATA_FILE)) {
+    // ponytail: reads the whole file on boot; fine for a school project, rotate the file if it grows to hundreds of MB
+    for (const line of fs.readFileSync(DATA_FILE, 'utf8').split('\n')) {
+      if (!line) continue;
+      try {
+        const r = JSON.parse(line);
+        r.source = SOURCES.includes(r.source) ? r.source : 'local';
+        history[r.source].push(r);
+      } catch { /* skip a half-written line */ }
+    }
+    for (const s of SOURCES) history[s] = history[s].slice(-MAX_MEMORY);
   }
-  for (const s of SOURCES) history[s] = history[s].slice(-MAX_MEMORY);
 }
 
 function store(source, { device, readings, gps = null }) {
@@ -54,64 +56,12 @@ function store(source, { device, readings, gps = null }) {
   return record;
 }
 
-// Accepts { key: number } or { key: { value, unit } }. Drops anything that isn't a finite number.
-function normalizeReadings(input) {
-  const out = {};
-  if (!input || typeof input !== 'object') return out;
-  for (const [key, raw] of Object.entries(input)) {
-    if (!/^[\w.-]{1,40}$/.test(key)) continue;
-    const value = typeof raw === 'object' && raw !== null ? raw.value : raw;
-    const unit = typeof raw === 'object' && raw !== null && typeof raw.unit === 'string' ? raw.unit.slice(0, 16) : '';
-    const num = typeof value === 'string' && value.trim() !== '' ? Number(value) : value;
-    if (typeof num === 'number' && Number.isFinite(num)) out[key] = { value: num, unit };
-  }
-  return out;
-}
-
-function normalizeGps(gps) {
-  if (!gps || gps.valid === false) return null;
-  const lat = Number(gps.lat), lon = Number(gps.lon);
-  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
-  if (Math.abs(lat) > 90 || Math.abs(lon) > 180 || (lat === 0 && lon === 0)) return null;
-  return { lat, lon };
-}
-
-// ---------- SSE clients, per source ----------
+// ---------- SSE clients, per source (local only) ----------
 const streams = { blynk: new Set(), local: new Set() };
-setInterval(() => { for (const s of SOURCES) for (const res of streams[s]) res.write(': ping\n\n'); }, 15000).unref();
+if (!IS_VERCEL) setInterval(() => { for (const s of SOURCES) for (const res of streams[s]) res.write(': ping\n\n'); }, 15000).unref();
 
-// ---------- Blynk ----------
-const blynk = { configured: Boolean(BLYNK_TOKEN), deviceOnline: null, lastUpdate: null, lastError: null, timer: null, delay: BLYNK_POLL_MS, polls: 0 };
-const BLYNK_PINS = SENSORS.filter((s) => s.blynkPin);
-
-async function blynkGet(apiPath) {
-  // the token is only ever in this URL; it is never logged or sent to browsers
-  const res = await fetch(`${BLYNK_BASE}${apiPath}${apiPath.includes('?') ? '&' : '?'}token=${encodeURIComponent(BLYNK_TOKEN)}`,
-    { signal: AbortSignal.timeout(5000) });
-  const text = await res.text();
-  if (!res.ok) {
-    let detail = text.slice(0, 120);
-    try { detail = JSON.parse(text).error?.message || detail; } catch { /* plain text */ }
-    throw new Error(`Blynk HTTP ${res.status}${res.status === 429 ? ' (rate limited)' : ''}: ${detail}`);
-  }
-  return text;
-}
-
-// One pin returns a raw value ("1"); several return {"v0":"1","v1":"23.5"}. Multi-value pins come as arrays.
-function parseBlynkValues(text) {
-  let data;
-  try { data = JSON.parse(text); } catch { data = text.trim(); }
-  if (BLYNK_PINS.length === 1 && (typeof data !== 'object' || data === null || Array.isArray(data))) {
-    data = { [BLYNK_PINS[0].blynkPin]: data };
-  }
-  const lower = Object.fromEntries(Object.entries(data || {}).map(([k, v]) => [k.toLowerCase(), Array.isArray(v) ? v[0] : v]));
-  const raw = {};
-  for (const s of BLYNK_PINS) {
-    const v = lower[s.blynkPin.toLowerCase()];
-    if (v !== undefined) raw[s.key] = { value: v, unit: s.unit || '' };
-  }
-  return normalizeReadings(raw);
-}
+// ---------- Blynk poller (local only) ----------
+const blynk = { configured: blynkApi.configured, deviceOnline: null, lastUpdate: null, lastError: null, timer: null, delay: BLYNK_POLL_MS, polls: 0 };
 
 function startBlynk() {
   if (!blynk.configured || blynk.timer || !streams.blynk.size || !BLYNK_PINS.length) return;
@@ -125,9 +75,8 @@ async function pollBlynk() {
   if (!streams.blynk.size) { console.log('Blynk: polling stopped (no dashboard on Blynk)'); return; }
   try {
     // isHardwareConnected every 4th poll keeps the status fresh without doubling the request count
-    if (blynk.polls % 4 === 0) blynk.deviceOnline = (await blynkGet('/external/api/isHardwareConnected')).trim() === 'true';
-    const pins = BLYNK_PINS.map((s) => encodeURIComponent(s.blynkPin)).join('&');
-    const readings = parseBlynkValues(await blynkGet(`/external/api/get?${pins}`));
+    if (blynk.polls % 4 === 0) blynk.deviceOnline = await blynkApi.isOnline();
+    const readings = await blynkApi.readValues();
     blynk.polls++;
     if (blynk.lastError) console.log('Blynk: recovered');
     blynk.lastError = null;
@@ -137,14 +86,16 @@ async function pollBlynk() {
       blynk.lastUpdate = store('blynk', { device: 'blynk', readings }).t;
     }
   } catch (err) {
-    blynk.lastError = err.name === 'TimeoutError' ? 'Blynk did not answer within 5 s' : err.message;
+    blynk.lastError = blynkError(err);
     blynk.delay = Math.min(blynk.delay * 2, 60000);
     console.warn(`Blynk: ${blynk.lastError} - retrying in ${Math.round(blynk.delay / 1000)} s`);
   }
   blynk.timer = setTimeout(pollBlynk, blynk.delay);
 }
 
-// ---------- Local: pull from the ESP32's own web server ----------
+const blynkError = (err) => (err.name === 'TimeoutError' ? 'Blynk did not answer within 5 s' : err.message);
+
+// ---------- Local: pull from the ESP32's own web server (local only) ----------
 const local = { host: null, hostSource: null, reachable: null, lastUpdate: null, lastError: null, timer: null, fails: 0 };
 
 // ESP_HOST in .env wins; otherwise the IP the ESP32 published on Blynk V10; otherwise mDNS.
@@ -152,7 +103,7 @@ async function resolveEspHost() {
   if (ESP_HOST) return { host: ESP_HOST, hostSource: 'env' };
   if (blynk.configured) {
     try {
-      const text = (await blynkGet(`/external/api/get?${ESP_IP_PIN}`)).trim();
+      const text = (await blynkApi.get(`/external/api/get?${ESP_IP_PIN}`)).trim();
       let ip = text;
       try { const parsed = JSON.parse(text); ip = Array.isArray(parsed) ? parsed[0] : parsed; } catch { /* raw string */ }
       ip = String(ip ?? '').trim();
@@ -206,6 +157,39 @@ async function pollLocal() {
 const app = express();
 const sourceOf = (req) => (SOURCES.includes(req.query.source) ? req.query.source : 'blynk');
 
+// tells the browser which way this copy runs: SSE + both sources locally, polling + Blynk only on Vercel
+app.get('/api/config', (req, res) => res.json({
+  deployment: IS_VERCEL ? 'vercel' : 'local',
+  localModeAvailable: !IS_VERCEL,
+  pollMs: BLYNK_POLL_MS,
+}));
+
+if (IS_VERCEL) {
+  // Read Blynk on demand. The CDN serves this response to everyone for 3 s (then stale while it refreshes),
+  // and the module caches for 3 s too, so ten open tabs cost the same Blynk quota as one.
+  app.get('/api/latest', async (req, res) => {
+    if (sourceOf(req) !== 'blynk') return res.status(400).json({ error: `Local Wi-Fi is not available here. ${LOCAL_ONLY}` });
+    if (!blynkApi.configured) {
+      return res.status(503).json({ configured: false, error: 'BLYNK_TOKEN is not set on the server. Add it in Vercel: Settings > Environment Variables, then redeploy.' });
+    }
+    try {
+      const snap = await blynkApi.snapshot();
+      const fresh = snap.deviceOnline !== false && Object.keys(snap.readings).length > 0;
+      res.set('Cache-Control', 'public, s-maxage=3, stale-while-revalidate=10');
+      res.json({
+        now: Date.now(), source: 'blynk', configured: true,
+        deviceOnline: snap.deviceOnline, timestamp: snap.t, readings: snap.readings,
+        // same shape as the local server; null while the device is offline (Blynk keeps its old values)
+        latest: fresh ? { t: snap.t, source: 'blynk', device: 'blynk', readings: snap.readings, gps: null } : null,
+      });
+    } catch (err) {
+      res.status(502).json({ configured: true, error: blynkError(err) });
+    }
+  });
+  // no long-lived connections or server-side history on serverless
+  app.get('/api/stream', (req, res) => res.status(404).json({ error: 'Live streams run only with npm start. On Vercel, poll /api/latest.' }));
+}
+
 app.get('/api/stream', (req, res) => {
   const source = sourceOf(req);
   res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' });
@@ -218,7 +202,13 @@ app.get('/api/stream', (req, res) => {
 // `now` lets browsers correct for their own clock being off from the server's.
 app.get('/api/latest', (req, res) => {
   const source = sourceOf(req);
-  res.json({ now: Date.now(), source, latest: history[source].at(-1) || null });
+  const latest = history[source].at(-1) || null;
+  res.json({
+    now: Date.now(), source, latest,
+    deviceOnline: source === 'blynk' ? blynk.deviceOnline : local.reachable,
+    timestamp: latest?.t ?? null,
+    readings: latest?.readings ?? {},
+  });
 });
 
 app.get('/api/history', (req, res) => {
@@ -246,7 +236,7 @@ app.get('/api/status', (req, res) => res.json({
   },
 }));
 
-app.get('/api/sensors', (req, res) => res.json(SENSORS.map(({ key, label, unit, type, onText, offText }) => ({ key, label, unit, type, onText, offText }))));
+app.get('/api/sensors', (req, res) => res.json(publicSensors()));
 
 app.get('/api/export.csv', (req, res) => {
   const source = sourceOf(req);
@@ -269,14 +259,14 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 module.exports = app; // Vercel imports the app instead of running it
 
-if (require.main === module) app.listen(PORT, '0.0.0.0', () => {
+if (require.main === module && !IS_VERCEL) app.listen(PORT, '0.0.0.0', () => {
   const ips = Object.values(os.networkInterfaces()).flat()
     .filter((i) => i && i.family === 'IPv4' && !i.internal).map((i) => i.address);
   console.log(`\nAgriFly server running on port ${PORT}`);
   for (const ip of ips.length ? ips : ['localhost']) console.log(`  Dashboard:      http://${ip}:${PORT}/dashboard`);
   console.log(`  On this laptop: http://localhost:${PORT}`);
   console.log(blynk.configured
-    ? `  Blynk Cloud:    token configured (${BLYNK_SERVER}), polled every ${BLYNK_POLL_MS / 1000} s while a dashboard shows Blynk`
+    ? `  Blynk Cloud:    token configured (${blynkApi.server}), polled every ${BLYNK_POLL_MS / 1000} s while a dashboard shows Blynk`
     : '  Blynk Cloud:    NOT configured - add BLYNK_TOKEN to .env to read data from Blynk');
   console.log(`  Local Wi-Fi:    ESP32 address from ${ESP_HOST ? `ESP_HOST (${ESP_HOST})` : blynk.configured ? `Blynk ${ESP_IP_PIN.toUpperCase()}, else ${MDNS_HOST}` : MDNS_HOST}, polled every ${LOCAL_POLL_MS / 1000} s while a dashboard shows Local Wi-Fi`);
   console.log('');

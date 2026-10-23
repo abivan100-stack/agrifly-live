@@ -6,7 +6,8 @@ All endpoints are served by `server.js` on port 3000 (bound to `0.0.0.0`).
 | Method | Path | Purpose |
 |---|---|---|
 | GET | `/api/stream?source=` | Server-Sent Events, one message per new reading, heartbeat every 15 s. Opening a stream starts polling that source; when the last stream of a source closes, its polling stops. |
-| GET | `/api/latest?source=` | `{ now, source, latest }` |
+| GET | `/api/config` | `{ deployment: "local" \| "vercel", localModeAvailable, pollMs }`. The pages read this first to pick SSE (local) or polling (Vercel). |
+| GET | `/api/latest?source=` | `{ now, source, latest, deviceOnline, timestamp, readings }`. `latest` is the newest record or `null`. |
 | GET | `/api/history?source=&limit=500` | `{ now, source, readings: [...] }`, oldest first, up to 2000 per source. |
 | GET | `/api/export.csv?source=` | Readings of that source as CSV, one column per reading key. |
 | GET | `/api/status` | `{ now, blynk: { configured, deviceOnline, lastUpdate, lastError, polling }, local: { host, hostSource, reachable, lastUpdate, lastError, polling } }` |
@@ -14,6 +15,16 @@ All endpoints are served by `server.js` on port 3000 (bound to `0.0.0.0`).
 
 `now` is the server's clock, so browsers with a wrong clock still show correct "X s ago" times.
 The Blynk token is only used server-side; no endpoint returns it. No dashboard open = no polling at all.
+
+## On Vercel (`process.env.VERCEL` set)
+
+Blynk only. No `app.listen`, no background pollers, no files written, no SSE (`/api/stream` returns 404).
+`/api/latest?source=blynk` reads Blynk on demand: one multi-pin `get` for every pin in `sensors.json`, plus
+`isHardwareConnected` at most every 12 s. Answers are cached for 3 s in the function and on the CDN
+(`Cache-Control: public, s-maxage=3, stale-while-revalidate=10`). `latest` is `null` while the device is offline.
+Errors: `503 { configured: false, error }` when `BLYNK_TOKEN` is missing, `502 { error }` when Blynk fails,
+`400` for `source=local`. `/api/history`, `/api/status` and `/api/export.csv` exist but hold no data there;
+the dashboard keeps history in the tab and builds the CSV itself.
 
 ## Blynk source
 

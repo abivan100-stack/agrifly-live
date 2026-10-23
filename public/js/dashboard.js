@@ -1,6 +1,8 @@
 // Live dashboard. Cards come from config/sensors.json (via /api/sensors); any other key that arrives
 // from the local source gets a card too, so a new sensor needs no code change here.
 // Two sources: Blynk Cloud (default) and Local Wi-Fi, switched with the toggle at the top.
+// /api/config says how this copy runs: locally (npm start) data comes over SSE; on Vercel the page polls
+// /api/latest, keeps history in memory, builds the CSV itself, and Local Wi-Fi is switched off.
 (() => {
   const { prettify, format, ago, duration } = window.AgriFly;
   const $ = (id) => document.getElementById(id);
@@ -24,6 +26,10 @@
   let map = null, track = null, points = null, lastMarker = null, markers = [];
   let selectedKey = null;    // the reading shown large in the focus panel, on the chart and on the map
   let range = 900000;        // chart window in ms, 0 = all
+  let cloud = false;         // true on Vercel: poll instead of SSE, Blynk only
+  let pollMs = 3000;
+  let pollTimer = null;
+  const LOCAL_ONLY = 'Available only when running on the same network (npm start)';
 
   const serverNow = () => Date.now() + clockOffset;
   const last = () => records.at(-1);
@@ -60,6 +66,7 @@
 
   // SSE reconnects by itself; each (re)connect re-syncs history so no gap is left behind.
   function connect() {
+    if (cloud) return startPolling();
     if (es) es.close();
     const mine = es = new EventSource(`/api/stream?source=${source}`);
     es.onopen = () => { streamOk = true; loadHistory(mine).catch((e) => console.error('history load failed', e)); };
@@ -77,7 +84,49 @@
     rebuild();
   }
 
+  // ---------- Vercel: poll Blynk through /api/latest (cached 3 s on the CDN), only while the tab is visible ----------
+  function startPolling() {
+    clearTimeout(pollTimer);
+    const run = async () => {
+      if (document.visibilityState === 'visible') await pollCloud();
+      pollTimer = setTimeout(run, pollMs);
+    };
+    run();
+  }
+
+  async function pollCloud() {
+    try {
+      const res = await fetch('/api/latest?source=blynk');
+      const data = await res.json();
+      streamOk = true;
+      status = { blynk: {
+        configured: data.configured !== false,
+        deviceOnline: data.deviceOnline ?? null,
+        lastUpdate: data.latest?.t ?? null,
+        lastError: res.ok ? null : data.error,
+      } };
+      if (data.latest) onRecord(data.latest); // repeats of a cached response have the same t and are skipped
+    } catch {
+      streamOk = false;
+    }
+    tick();
+  }
+
+  function downloadCsv() {
+    const keys = [...new Set(records.flatMap((r) => Object.keys(r.readings)))];
+    const unit = (k) => records.findLast((r) => r.readings[k])?.readings[k].unit || '';
+    const esc = (v) => (/[",\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : String(v));
+    const header = ['time', 'source', 'device', 'lat', 'lon', ...keys.map((k) => (unit(k) ? `${k} (${unit(k)})` : k))];
+    const rows = records.map((r) => [new Date(r.t).toISOString(), r.source, r.device, r.gps?.lat ?? '', r.gps?.lon ?? '',
+      ...keys.map((k) => r.readings[k]?.value ?? '')]);
+    const blob = new Blob(['﻿' + [header, ...rows].map((row) => row.map(esc).join(',')).join('\n')], { type: 'text/csv;charset=utf-8' });
+    const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: `agrifly-${source}-readings.csv` });
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+
   async function refreshStatus() {
+    if (cloud) return; // status comes with each /api/latest poll
     try {
       status = await (await fetch('/api/status', { cache: 'no-store' })).json();
       clockOffset = status.now - Date.now();
@@ -90,7 +139,7 @@
   function onRecord(r) {
     if (last() && r.t <= last().t) return;
     records.push(r);
-    if (records.length > 5000) records = records.slice(-2000);
+    if (records.length > 2200) records = records.slice(-2000);
     Object.keys(r.readings).forEach(ensureCard);
     for (const key of Object.keys(r.readings)) updateCard(key);
     syncChartOptions();
@@ -518,7 +567,9 @@
     }
     const b = status?.blynk;
     if (!b) return { cls: '', text: 'Checking...', note: since };
-    if (!b.configured) return { cls: 'offline', text: 'Blynk not set up', note: 'No Blynk token on the server.', empty: 'Blynk Cloud is not set up yet. Add your Blynk device token to .env as BLYNK_TOKEN and restart the server.' };
+    if (!b.configured) return { cls: 'offline', text: 'Blynk not set up', note: 'No Blynk token on the server.', empty: cloud
+      ? 'Blynk Cloud is not set up yet. Add BLYNK_TOKEN in Vercel (Settings, Environment Variables) and redeploy.'
+      : 'Blynk Cloud is not set up yet. Add your Blynk device token to .env as BLYNK_TOKEN and restart the server.' };
     if (b.lastError) return { cls: 'offline', text: 'Blynk error', note: b.lastError };
     if (b.deviceOnline === false) return { cls: 'offline', text: 'Device offline', note: `Blynk says the ESP32 is not connected. ${since}`, empty: 'The ESP32 is not connected to Blynk. Check that it is powered and on 2.4 GHz Wi-Fi.' };
     if (b.deviceOnline === true && lastT) return { cls: 'live', text: 'Live', note: since };
@@ -575,10 +626,24 @@
     resizeTimer = setTimeout(() => { for (const key of cards.keys()) updateCard(key); updateChart(); }, 150);
   });
 
+  $('csv').addEventListener('click', (e) => { if (cloud) { e.preventDefault(); downloadCsv(); } });
+  document.addEventListener('visibilitychange', () => { if (cloud && document.visibilityState === 'visible') startPolling(); });
+
   (async () => {
     try { sensors = await (await fetch('/api/sensors')).json(); } catch { sensors = []; }
+    try {
+      const config = await (await fetch('/api/config')).json();
+      cloud = config.deployment === 'vercel';
+      pollMs = config.pollMs || 3000;
+    } catch { /* older server: behave as local */ }
+    if (cloud) {
+      const btn = document.querySelector('[data-source="local"]');
+      btn.disabled = true;
+      btn.title = LOCAL_ONLY;
+      $('local-note').hidden = false;
+    }
     let saved = null;
     try { saved = localStorage.getItem(STORAGE_KEY); } catch { /* storage blocked */ }
-    setSource(saved === 'local' ? 'local' : 'blynk');
+    setSource(!cloud && saved === 'local' ? 'local' : 'blynk');
   })();
 })();

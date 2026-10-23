@@ -110,9 +110,41 @@ let server;
     await sleep(200); // appendFile is async
     const sources = fs.readFileSync(dataFile, 'utf8').trim().split('\n').map((l) => JSON.parse(l).source);
     assert.ok(sources.includes('local') && sources.includes('blynk'), 'both sources persisted');
+    server.kill();
+
+    // ---- run 3: Vercel mode, in-process (Vercel imports the app; it never listens or polls by itself) ----
+    const vercelFile = path.join(os.tmpdir(), `agrifly-vercel-${process.pid}.jsonl`);
+    Object.assign(process.env, { VERCEL: '1', BLYNK_TOKEN, BLYNK_SERVER: `http://localhost:${BLYNK_PORT}`, BLYNK_POLL_MS: '3000', DATA_FILE: vercelFile });
+    const serverPath = require.resolve('../server.js');
+    const VPORT = 3996, V = `http://localhost:${VPORT}`;
+    const listen = (app, port = VPORT) => new Promise((r) => { const srv = app.listen(port, () => r(srv)); });
+    let vServer = await listen(require(serverPath));
+    assert.deepEqual(await (await fetch(`${V}/api/config`)).json(), { deployment: 'vercel', localModeAvailable: false, pollMs: 3000 });
+    const gets = blynkGets;
+    const first = await fetch(`${V}/api/latest?source=blynk`);
+    assert.equal(first.headers.get('cache-control'), 'public, s-maxage=3, stale-while-revalidate=10', 'CDN may share the answer');
+    const body = await first.text();
+    assert.ok(!body.includes(BLYNK_TOKEN), 'token never in /api/latest');
+    const latest = JSON.parse(body);
+    assert.deepEqual([latest.deviceOnline, latest.readings, latest.latest.readings], [true, { ir: { value: 1, unit: '' } }, { ir: { value: 1, unit: '' } }]);
+    await Promise.all([1, 2, 3, 4, 5].map(() => fetch(`${V}/api/latest?source=blynk`)));
+    assert.equal(blynkGets - gets, 1, 'six viewers within 3 s cost one Blynk values request');
+    assert.equal((await fetch(`${V}/api/stream?source=blynk`)).status, 404, 'no SSE on Vercel');
+    assert.equal((await fetch(`${V}/api/latest?source=local`)).status, 400, 'no Local Wi-Fi on Vercel');
+    assert.ok(!fs.existsSync(vercelFile), 'nothing written to disk on Vercel');
+    vServer.closeAllConnections(); vServer.close();
+
+    // missing token: a clear JSON error, not a crash
+    process.env.BLYNK_TOKEN = '';
+    delete require.cache[serverPath];
+    vServer = await listen(require(serverPath), VPORT - 1); // fresh port: fetch may reuse a socket to the old one
+    const missing = await fetch(`http://localhost:${VPORT - 1}/api/latest?source=blynk`);
+    assert.equal(missing.status, 503);
+    assert.match((await missing.json()).error, /BLYNK_TOKEN is not set/);
+    vServer.closeAllConnections(); vServer.close();
     console.log('smoke test passed');
   } catch (err) {
-    console.error('smoke test FAILED:', err.message);
+    console.error('smoke test FAILED:', err.message, err.cause?.code || '', err.stack?.split('\n').find((l) => l.includes('smoke-test.js:')) || '');
     process.exitCode = 1;
   } finally {
     server?.kill();
