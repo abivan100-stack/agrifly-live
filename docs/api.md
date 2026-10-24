@@ -30,8 +30,8 @@ the dashboard keeps history in the tab and builds the CSV itself.
 
 While a `source=blynk` stream is open, every `BLYNK_POLL_MS` (default 2000):
 
-- `GET https://{BLYNK_SERVER}/external/api/get?v0[&v1...]&token=...` - one pin returns a raw value (`1`),
-  several return `{"v0":"1","v1":"23.5"}`. Pins map to sensor keys through `blynkPin` in `config/sensors.json`.
+- `GET https://{BLYNK_SERVER}/external/api/get?v6[&v7...]&token=...` - one pin returns a raw value (`512`),
+  several return `{"v6":"512","v7":"12.5"}`. Pins map to sensor keys through `blynkPin` in `config/sensors.json`.
 - `GET https://{BLYNK_SERVER}/external/api/isHardwareConnected?token=...` - every 4th poll, for the online status.
 
 Errors and rate limits are logged and back off (doubling, up to 60 s).
@@ -43,7 +43,7 @@ While a `source=local` stream is open, every `LOCAL_POLL_MS` (default 1000), wit
 `GET http://<esp>/data` →
 
 ```json
-{ "device": "agrifly-01", "readings": { "ir": { "value": 1, "unit": "" } }, "uptime": 123 }
+{ "device": "agrifly-01", "readings": { "gas": { "value": 512, "unit": "ADC" }, "tilt": { "value": 12.5, "unit": "°" } }, "uptime": 123 }
 ```
 
 Readings may also be bare numbers; an optional `"gps": {"lat","lon","valid"}` is ignored when `valid` is false.
@@ -58,7 +58,7 @@ The ESP32 address is found in this order (`hostSource` in `/api/status`):
 ## Stored record
 
 ```json
-{ "t": 1761240000000, "source": "local", "device": "agrifly-01", "readings": { "ir": { "value": 1, "unit": "" } }, "gps": null }
+{ "t": 1761240000000, "source": "local", "device": "agrifly-01", "readings": { "gas": { "value": 512, "unit": "ADC" } }, "gps": null }
 ```
 
 Kept in memory (last 2000 per source) and appended to `data/readings.jsonl`, which is reloaded on restart.

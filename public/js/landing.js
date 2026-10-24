@@ -8,7 +8,7 @@
   const feed = $('feed');
   const OFFLINE_AFTER_MS = 10000;
   const CENTER = { lat: 13.0827, lon: 80.2707 };
-  const SHORT = { ir: 'IR', temperature: 'TEMP', humidity: 'HUM', pressure: 'PRES', light: 'LUX', soil: 'SOIL', gas_raw: 'GAS' };
+  const SHORT = { gas: 'GAS', tilt: 'TILT', temperature: 'TEMP', humidity: 'HUM', pressure: 'PRES', light: 'LUX', soil: 'SOIL', gas_raw: 'GAS' };
   const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   let mode = 'demo', userChose = false, live = null; // live = { record, age }

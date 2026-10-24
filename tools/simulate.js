@@ -1,5 +1,5 @@
 // Fake ESP32 for the Local Wi-Fi source: answers GET http://localhost:8080/data like the real board.
-//   npm run simulate              IR sensor only (toggles at random, like a hand passing)
+//   npm run simulate              gas (raw ADC) and tilt (degrees), like the real board
 //   npm run simulate -- --all     also temperature, humidity, soil, light and a GPS point walking near Chennai
 // Then set ESP_HOST=localhost:8080 in .env, restart npm start, and pick "Local Wi-Fi" on the dashboard.
 const http = require('http');
@@ -19,11 +19,12 @@ const EXTRA = {
 const state = Object.fromEntries(Object.entries(EXTRA).map(([k, [start]]) => [k, start]));
 const CENTER = { lat: 13.0827, lon: 80.2707 };
 const started = Date.now();
-let ir = 0, step = 0, gps = null;
+let gas = 900, tilt = 4, step = 0, gps = null;
 
 // the "sensors" change on their own clock, whether or not anyone asks
 setInterval(() => {
-  if (Math.random() < 0.3) ir = ir ? 0 : 1;
+  gas = Math.round(Math.min(4095, Math.max(200, gas + (Math.random() * 2 - 1) * 40)));
+  tilt = Math.round(Math.min(180, Math.max(0, tilt + (Math.random() * 2 - 1) * 1.5)) * 10) / 10;
   for (const [key, [, min, max, size]] of Object.entries(EXTRA)) {
     state[key] = Math.min(max, Math.max(min, state[key] + (Math.random() * 2 - 1) * size));
   }
@@ -40,7 +41,7 @@ http.createServer((req, res) => {
     res.writeHead(404, { 'Content-Type': 'text/plain' });
     return res.end('Not found. Try /data');
   }
-  const readings = { ir: { value: ir, unit: '' } };
+  const readings = { gas: { value: gas, unit: 'ADC' }, tilt: { value: tilt, unit: '°' } };
   const body = { device: 'agrifly-sim', readings, uptime: Math.round((Date.now() - started) / 1000) };
   if (ALL) {
     for (const [key, cfg] of Object.entries(EXTRA)) readings[key] = { value: Math.round(state[key] * 10) / 10, unit: cfg[4] };
@@ -48,8 +49,8 @@ http.createServer((req, res) => {
   }
   res.writeHead(200, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify(body));
-  console.log(`${new Date().toLocaleTimeString()}  served /data  ir=${ir}${ALL ? ` temperature=${readings.temperature.value}` : ''}`);
+  console.log(`${new Date().toLocaleTimeString()}  served /data  gas=${gas} tilt=${tilt}${ALL ? ` temperature=${readings.temperature.value}` : ''}`);
 }).listen(PORT, () => {
-  console.log(`Fake ESP32 (${ALL ? 'IR + temperature, humidity, soil, light, GPS' : 'IR sensor'}) at http://localhost:${PORT}/data`);
+  console.log(`Fake ESP32 (${ALL ? 'gas, tilt + temperature, humidity, soil, light, GPS' : 'gas and tilt'}) at http://localhost:${PORT}/data`);
   console.log(`Set ESP_HOST=localhost:${PORT} in .env, restart npm start, and choose "Local Wi-Fi" on the dashboard.`);
 });

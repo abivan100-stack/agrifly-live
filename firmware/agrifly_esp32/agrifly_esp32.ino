@@ -1,7 +1,6 @@
 /*
   AgriFly ESP32 sensor payload
     Blynk (default): writes
-        V0  = IR sensor (0/1), on change
         V6  = MQ-135 gas sensor level (raw ADC 0-4095)
         V7  = MPU6050 tilt (degrees from level, 0-180)
         V10 = this board's local IP, on every connect
@@ -13,10 +12,9 @@
              Adafruit Unified Sensor too). WiFi, WebServer, ESPmDNS and Wire come with the ESP32 core.
 
   Setup: copy secrets.example.h to secrets.h and fill in the Blynk IDs/token and Wi-Fi.
-  Blynk datastreams (template): V0 Integer 0-1, V6 Integer 0-4095, V7 Double 0-180, V10 String.
+  Blynk datastreams (template): V6 Integer 0-4095, V7 Double 0-180, V10 String.
 
   Wiring:
-    IR obstacle sensor: VCC -> 3V3, GND -> GND, OUT -> GPIO 27 (internal pull-up: reads "clear" when unplugged)
     MPU6050 (GY-521):   VCC -> 3V3, GND -> GND, SDA -> GPIO 21, SCL -> GPIO 22, AD0 -> GND
     MQ-135:             VCC -> VIN (5 V), GND -> GND, AO -> 10 kOhm -> GPIO 35 -> 20 kOhm -> GND
                         (the divider keeps the 5 V sensor output safe for the ESP32 pin)
@@ -45,7 +43,6 @@ char ssid[] = WIFI_SSID;      // 2.4 GHz
 char pass[] = WIFI_PASSWORD;
 
 const char* DEVICE_ID = "agrifly-01";
-const int IR_PIN  = 27;
 const int GAS_PIN = 35;       // ADC1 pin, input only: works while Wi-Fi is on
 const int I2C_SDA = 21;
 const int I2C_SCL = 22;
@@ -75,8 +72,6 @@ BlynkTimer timer;
 WebServer localServer(80);   // only answers when the website asks (Local Wi-Fi mode)
 Adafruit_MPU6050 mpu;
 
-int irState = -1;
-int lastSentBlynk = -1;
 bool mdnsStarted = false;
 
 // MPU6050 (tilt)
@@ -93,10 +88,6 @@ int  gasRaw = 0;
 int      lastSentGas  = -1;
 float    lastSentTilt = -1000.0f;
 uint32_t lastSensorSendMs = 0;
-
-int readIR() {
-  return (digitalRead(IR_PIN) == LOW) ? 1 : 0;   // most IR modules go LOW on detect
-}
 
 // ---------- MQ-135 ----------
 int readGasAveraged() {
@@ -171,20 +162,10 @@ void sendIP() {
 }
 
 BLYNK_CONNECTED() {
-  lastSentBlynk = -1;   // resend current values
-  lastSentGas   = -1;
+  lastSentGas   = -1;   // resend current values
   lastSentTilt  = -1000.0f;
   sendIP();
   Serial.println("[Blynk] connected, IP sent to V10");
-}
-
-void checkIR() {
-  irState = readIR();
-  if (irState != lastSentBlynk && Blynk.connected()) {
-    Blynk.virtualWrite(V0, irState);                    // only on change: saves quota
-    lastSentBlynk = irState;
-    Serial.printf("[Blynk] V0 = %d\n", irState);
-  }
 }
 
 void pushSensors() {
@@ -208,11 +189,11 @@ void pushSensors() {
 
 // ---------- Local Wi-Fi (on request only) ----------
 void handleData() {
-  String json = String("{\"device\":\"") + DEVICE_ID +
-                "\",\"readings\":{\"ir\":{\"value\":" + irState + ",\"unit\":\"\"}";
-  if (gasReady)  json += String(",\"gas\":{\"value\":") + gasRaw + ",\"unit\":\"ADC\"}";
-  if (tiltValid) json += String(",\"tilt\":{\"value\":") + String(tiltDeg, 1) + ",\"unit\":\"\\u00b0\"}";
-  json += String("},\"uptime\":") + (millis() / 1000) + "}";
+  // only readings we have: gas after its warm-up, tilt while the MPU6050 answers
+  String readings = "";
+  if (gasReady)  readings += String("\"gas\":{\"value\":") + gasRaw + ",\"unit\":\"ADC\"}";
+  if (tiltValid) readings += String(readings.length() ? "," : "") + "\"tilt\":{\"value\":" + String(tiltDeg, 1) + ",\"unit\":\"\\u00b0\"}";
+  String json = String("{\"device\":\"") + DEVICE_ID + "\",\"readings\":{" + readings + "},\"uptime\":" + (millis() / 1000) + "}";
   localServer.sendHeader("Access-Control-Allow-Origin", "*");
   localServer.send(200, "application/json", json);
 }
@@ -240,9 +221,6 @@ void checkWiFi() {
 
 void setup() {
   Serial.begin(115200);
-  // Pull-up: with no IR module plugged in the pin would float and read random LOWs, which count as
-  // "object detected". Pulled up, an empty pin reads HIGH = clear; a connected module still pulls it LOW.
-  pinMode(IR_PIN, INPUT_PULLUP);
 
   pinMode(GAS_PIN, INPUT);
   analogReadResolution(12);                       // 0-4095
@@ -274,7 +252,6 @@ void setup() {
   Blynk.config(BLYNK_AUTH_TOKEN, BLYNK_SERVER, 80);
   Blynk.connect(5000);
 
-  timer.setInterval(200L,   checkIR);
   timer.setInterval(10000L, checkWiFi);
   timer.setInterval(300000L, sendIP);   // every 5 min: covers a V10 added after connect, or a new IP
   timer.setInterval((long)SENSOR_READ_MS, readSensors);

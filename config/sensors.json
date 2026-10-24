@@ -1,5 +1,4 @@
 [
-  { "key": "ir", "blynkPin": "v0", "label": "IR Sensor", "unit": "", "type": "binary", "onText": "Object detected", "offText": "Clear" },
   { "key": "gas", "blynkPin": "v6", "label": "Gas sensor level (raw)", "unit": "ADC", "type": "number" },
   { "key": "tilt", "blynkPin": "v7", "label": "Tilt", "unit": "°", "type": "number" }
 ]

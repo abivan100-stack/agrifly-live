@@ -174,8 +174,8 @@
     records.push(r);
     if (records.length > 2200) records = records.slice(-2000);
     saveSoon();
-    Object.keys(r.readings).forEach(ensureCard);
-    for (const key of Object.keys(r.readings)) updateCard(key);
+    if (source === 'local') Object.keys(r.readings).forEach(ensureCard); // Blynk only carries configured sensors
+    for (const key of Object.keys(r.readings)) if (cards.has(key)) updateCard(key);
     syncChartOptions();
     updateChart();
     if (r.gps) { addGps(r, true); recolorMap(); }
@@ -412,7 +412,7 @@
       chart.update('none');
       return;
     }
-    empty.textContent = 'No detections in this time range yet. Wave a hand in front of the sensor to test it.';
+    empty.textContent = 'No detections in this time range yet.';
     // don't stretch a few minutes of data across an empty 15 min / 1 h axis
     const start = pts[0].x;
     const x = chart.options.scales.x;
@@ -672,7 +672,11 @@
   }
 
   function rebuild() {
-    for (const r of records) Object.keys(r.readings).forEach(ensureCard);
+    // extra cards only for Local Wi-Fi keys sent in the last 15 min, so a removed sensor doesn't come back from old data
+    if (source === 'local') {
+      const recent = serverNow() - 15 * 60000;
+      for (const r of records) if (r.t >= recent) Object.keys(r.readings).forEach(ensureCard);
+    }
     for (const key of cards.keys()) updateCard(key);
     syncChartOptions();
     updateChart();

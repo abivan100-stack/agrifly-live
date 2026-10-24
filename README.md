@@ -3,14 +3,14 @@
 **Smarter Technology for Smarter Farming** .
 
 AgriFly is an IoT field-monitoring system. An FPV drone carries an ESP32 with sensors and sends readings to a
-live dashboard. Right now we are testing with **one IR obstacle sensor** (1 = object detected, 0 = clear).
-Planned next: BME280 (temperature, humidity, pressure), BH1750 (light), soil moisture (estimated %),
-MQ gas sensor (raw level) and NEO-6M GPS.
+live dashboard. Right now we are testing with an **MQ-135 gas sensor** (raw ADC level, not ppm) and an
+**MPU6050 tilt sensor** (degrees from level).
+Planned next: BME280 (temperature, humidity, pressure), BH1750 (light), soil moisture (estimated %) and NEO-6M GPS.
 
 The dashboard can read the ESP32 two ways:
 
 ```
-ESP32 ── writes V0 (IR) and V10 (its IP) ──► Blynk Cloud ◄── HTTPS, while a dashboard shows "Blynk Cloud" ──┐
+ESP32 ── writes V6 (gas), V7 (tilt), V10 (its IP) ──► Blynk Cloud ◄── HTTPS, while a dashboard shows "Blynk Cloud" ──┐
   │                                                                                                         │
   └── serves GET http://<esp-ip>/data ◄──────────── HTTP, while a dashboard shows "Local Wi-Fi" ──── Node server (port 3000)
                                                                                                             │ Server-Sent Events
@@ -47,11 +47,11 @@ the `Dashboard:` address that `npm start` prints.
 ### Test Local mode without hardware
 
 ```bash
-npm run simulate -- --all     # fake ESP32 at http://localhost:8080/data (IR + temperature, humidity, soil, light, GPS)
+npm run simulate -- --all     # fake ESP32 at http://localhost:8080/data (gas, tilt + temperature, humidity, soil, light, GPS)
 ```
 
 Put `ESP_HOST=localhost:8080` in `.env`, restart `npm start`, and choose **Local Wi-Fi** on the dashboard.
-New sensor cards appear by themselves. `npm run simulate` without `--all` serves the IR sensor only.
+New sensor cards appear by themselves. `npm run simulate` without `--all` serves gas and tilt only.
 `npm test` runs a self-check against a fake Blynk server and a fake ESP32.
 
 ## Two ways to run
@@ -82,11 +82,12 @@ only apply to new deployments. The project is linked to GitHub, so a push to `ma
 
 ## Blynk setup
 
-In the Blynk console, the template needs two datastreams:
+In the Blynk console, the template needs these datastreams:
 
 | Virtual pin | Name | Type | Used for |
 |---|---|---|---|
-| V0 | IR | Integer, 0-1 | the IR sensor reading |
+| V6 | Gas | Integer, 0-4095 | MQ-135 raw level (ADC), sent after a 2-minute warm-up |
+| V7 | Tilt | Double, 0-180 | MPU6050 tilt in degrees (0 = flat) |
 | V10 | ESP IP | String | the ESP32's local IP, written on every connect, so Local mode can find it |
 
 ## Dashboard sources
@@ -114,13 +115,14 @@ No IP needs typing anywhere. The server tries, in order:
 ## Flash the ESP32 (Arduino IDE)
 
 1. **Boards Manager:** install "esp32" by Espressif Systems. Select board **ESP32 Dev Module**.
-2. **Library Manager:** install **Blynk** (by Volodymyr Shymanskyy).
+2. **Library Manager:** install **Blynk** (by Volodymyr Shymanskyy) and **Adafruit MPU6050** (with its dependencies).
 3. Copy `firmware/agrifly_esp32/secrets.example.h` to `secrets.h` in the same folder and fill in
    `BLYNK_TEMPLATE_ID`, `BLYNK_TEMPLATE_NAME`, `BLYNK_AUTH_TOKEN` (Blynk console) and `WIFI_SSID`,
    `WIFI_PASSWORD` (a 2.4 GHz network).
-4. Check `IR_PIN` in `agrifly_esp32.ino` matches your wiring (default GPIO 27).
+4. Check the wiring in the header of `agrifly_esp32.ino`: MPU6050 on SDA 21 / SCL 22, MQ-135 through a
+   10 kΩ / 20 kΩ divider to GPIO 35 (the MQ-135 runs on 5 V; the ESP32 pin takes at most 3.3 V).
 5. Upload, then open Serial Monitor at 115200 baud. You should see
-   `Wi-Fi connected. Local data: http://192.168.x.x/data`. Wave your hand: `IR: object detected`.
+   `[MPU] found`, `[WiFi] connected` and `[Blynk] V7 tilt = …`; gas follows after its 2-minute warm-up.
 
 ## How to add a sensor
 

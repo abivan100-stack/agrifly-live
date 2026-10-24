@@ -13,7 +13,7 @@ const BLYNK_TOKEN = 'test-blynk-token-123';
 const dataFile = path.join(os.tmpdir(), `agrifly-test-${process.pid}.jsonl`);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-// fake Blynk: V0 = 1 (IR), V10 = the fake ESP32's address, device online
+// fake Blynk: V6 = 512 (gas), V7 = 12.5 (tilt), V10 = the fake ESP32's address, device online
 let blynkGets = 0, sawToken = true;
 const fakeBlynk = http.createServer((req, res) => {
   const url = new URL(req.url, 'http://x');
@@ -21,7 +21,11 @@ const fakeBlynk = http.createServer((req, res) => {
   if (url.pathname === '/external/api/isHardwareConnected') return res.end('true');
   if (url.pathname === '/external/api/get') {
     blynkGets++;
-    return res.end(url.searchParams.has('v10') ? `localhost:${ESP_PORT}` : '1');
+    if (url.searchParams.has('v10')) return res.end(`localhost:${ESP_PORT}`);
+    // like Blynk: one pin -> raw value, several -> {"v6":512,"v7":12.5}
+    const VALUES = { v6: 512, v7: 12.5 };
+    const pins = [...url.searchParams.keys()].filter((k) => k !== 'token');
+    return res.end(pins.length === 1 ? String(VALUES[pins[0]] ?? 0) : JSON.stringify(Object.fromEntries(pins.map((p) => [p, VALUES[p] ?? 0]))));
   }
   res.statusCode = 404; res.end('{"error":{"message":"not found"}}');
 }).listen(BLYNK_PORT);
@@ -31,7 +35,7 @@ let espGets = 0;
 const fakeEsp = http.createServer((req, res) => {
   espGets++;
   res.setHeader('Content-Type', 'application/json');
-  res.end(JSON.stringify({ device: 'agrifly-01', readings: { ir: { value: 1, unit: '' }, temperature: 30.5 }, uptime: 5 }));
+  res.end(JSON.stringify({ device: 'agrifly-01', readings: { gas: { value: 600, unit: 'ADC' }, tilt: 3.2 }, uptime: 5 }));
 }).listen(ESP_PORT);
 
 function startServer(extraEnv) {
@@ -74,7 +78,7 @@ let server;
     // Blynk source
     let { reader, event } = await firstEvent('blynk');
     assert.equal(event.source, 'blynk');
-    assert.deepEqual(event.readings, { ir: { value: 1, unit: '' } }, 'V0 mapped to ir via sensors.json');
+    assert.deepEqual(event.readings, { gas: { value: 512, unit: 'ADC' }, tilt: { value: 12.5, unit: '°' } }, 'V6/V7 mapped to gas/tilt via sensors.json');
     assert.ok(sawToken, 'server sent the token to Blynk');
     assert.equal(espGets, 0, 'Blynk dashboard does not poll the ESP32');
     reader.cancel();
@@ -87,7 +91,7 @@ let server;
     ({ reader, event } = await firstEvent('local'));
     assert.equal(event.source, 'local');
     assert.equal(event.device, 'agrifly-01');
-    assert.deepEqual(event.readings, { ir: { value: 1, unit: '' }, temperature: { value: 30.5, unit: '' } });
+    assert.deepEqual(event.readings, { gas: { value: 600, unit: 'ADC' }, tilt: { value: 3.2, unit: '' } });
     status = await json('/api/status');
     assert.deepEqual([status.local.host, status.local.hostSource, status.local.reachable], [`localhost:${ESP_PORT}`, 'env', true]);
     assert.equal(blynkGets, blynkAfter, 'ESP_HOST set: no Blynk call needed for local mode');
@@ -126,7 +130,7 @@ let server;
     const body = await first.text();
     assert.ok(!body.includes(BLYNK_TOKEN), 'token never in /api/latest');
     const latest = JSON.parse(body);
-    assert.deepEqual([latest.deviceOnline, latest.readings, latest.latest.readings], [true, { ir: { value: 1, unit: '' } }, { ir: { value: 1, unit: '' } }]);
+    assert.deepEqual([latest.deviceOnline, latest.readings, latest.latest.readings], [true, { gas: { value: 512, unit: 'ADC' }, tilt: { value: 12.5, unit: '°' } }, { gas: { value: 512, unit: 'ADC' }, tilt: { value: 12.5, unit: '°' } }]);
     await Promise.all([1, 2, 3, 4, 5].map(() => fetch(`${V}/api/latest?source=blynk`)));
     assert.equal(blynkGets - gets, 1, 'six viewers within 2 s cost one Blynk values request');
     assert.equal((await fetch(`${V}/api/stream?source=blynk`)).status, 404, 'no SSE on Vercel');
