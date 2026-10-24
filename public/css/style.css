@@ -164,32 +164,15 @@ a { color: inherit; }
 .cockpit-bar .hint { color: var(--on-dark-muted); font-size: .9rem; }
 .feed-note { color: var(--on-dark-muted); font-size: .85rem; }
 
-/* the camera view; JS sets --crop/--crop-dark (zone colour), --row (row width), --x/--y (travel), --roll */
+/* the camera view: js/field-view.js draws the farm on .view; the OSD and minimap sit on top */
 .feed {
-  --crop: #4f8a3a; --crop-dark: #3f7330; --row: 34px; --x: 0px; --y: 0px; --roll: 0deg;
   position: relative; flex: 1; min-height: 300px; overflow: hidden; border-radius: 3px;
   background: linear-gradient(#8fb4c4 0%, #c3d6d4 27%, #e9e2c2 36%);
   isolation: isolate; outline-offset: -4px;
 }
-.feed .world {
-  position: absolute; inset: -12%; transform: rotate(var(--roll)); transition: transform .25s ease-out;
-  background: linear-gradient(#8fb4c4 0%, #c3d6d4 30%, #e9e2c2 38.7%);
-}
-.feed .treeline { position: absolute; left: 0; right: 0; height: 24px; width: 100%; z-index: 1; }
-.feed .ground {
-  position: absolute; left: -60%; right: -60%; height: 220%;
-  transform-origin: 50% 0; transform: perspective(260px) rotateX(74deg);
-  background:
-    repeating-linear-gradient(0deg, rgba(40, 30, 10, .16) 0 22%, transparent 22% 100%),
-    repeating-linear-gradient(90deg, var(--crop) 0 58%, var(--crop-dark) 58% 76%, #5b4430 76% 100%);
-  background-size: 100% calc(var(--row) * 3.5), var(--row) 100%;
-  background-position: 0 var(--y), var(--x) 0;
-}
-/* .world overhangs by 12% each side so rolling never shows a corner; 38.7% of it = the horizon at 36% of the view */
-.feed .world .ground { top: 38.7%; }
-.feed .world .treeline { top: calc(38.7% - 22px); }
-.feed .haze { position: absolute; inset: 30% 0 0; z-index: 2; background: linear-gradient(rgba(233, 226, 194, .85), rgba(233, 226, 194, 0) 22%); pointer-events: none; }
-.feed .vignette { position: absolute; inset: 0; z-index: 3; box-shadow: inset 0 0 120px rgba(0, 0, 0, .45); pointer-events: none; }
+/* drawn at low resolution and scaled up smoothly, like an analog FPV feed */
+.feed .view { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.feed .vignette { position: absolute; inset: 0; z-index: 3; box-shadow: inset 0 0 110px rgba(0, 0, 0, .38); pointer-events: none; }
 .feed .minimap { position: absolute; right: 24px; top: 70px; z-index: 4; width: 120px; height: 120px; border: 2px solid #fff; box-shadow: 0 0 0 2px #000; }
 
 .osd {

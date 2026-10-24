@@ -1,19 +1,23 @@
 // Landing hero: a drone camera view with a Betaflight-style OSD.
 //  - Live drone: shows the latest real reading from /api/latest.
-//  - Fly the demo: the visitor steers over a simulated field; readings change by zone.
+//  - Fly the demo: the visitor flies over a simulated farm (perspective render in field-view.js, quadcopter
+//    physics below); readings change by soil zone.
 // Opens in live mode when the drone sent data in the last 10 s, otherwise in the demo.
 (() => {
   const $ = (id) => document.getElementById(id);
   const feed = $('feed');
   const OFFLINE_AFTER_MS = 10000;
-  const ROW_M = 0.75;                 // crop row spacing in metres
   const CENTER = { lat: 13.0827, lon: 80.2707 };
   const SHORT = { ir: 'IR', temperature: 'TEMP', humidity: 'HUM', pressure: 'PRES', light: 'LUX', soil: 'SOIL', gas_raw: 'GAS' };
   const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   let mode = 'demo', userChose = false, live = null; // live = { record, age }
   let cloud = false, pollMs = 1000; // on Vercel: Blynk only, no SSE, pause while the tab is hidden
-  const fly = { x: 0, y: 0, steer: 0, speed: reduceMotion ? 0 : 5, alt: 8, trail: [] };
+  // demo flight state. speed/alt are what the sliders ask for; the drone eases towards them like a real quad.
+  const fly = {
+    x: 40, y: 0, heading: 0, vx: 0, vy: 0, alt: 8, vz: 0, yawRate: 0, pitch: 0, roll: 0, // starts over crop rows, not a track
+    steer: 0, speed: reduceMotion ? 0 : 5, altSet: 8, trail: [],
+  };
 
   // ---------- simulated field: smooth dry/wet zones ----------
   function soilAt(x, y) {
@@ -37,7 +41,6 @@
 
   const hex = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
   const mix = (a, b, t) => `rgb(${hex(a).map((v, i) => Math.round(v + (hex(b)[i] - v) * t)).join(',')})`;
-  const zone = (m) => [mix('#b8a057', '#2e7d3c', m / 100), mix('#9d8444', '#226431', m / 100)];
 
   // ---------- OSD ----------
   const line = (text) => Object.assign(document.createElement('div'), { textContent: text });
@@ -77,7 +80,9 @@
       $('osd-time').textContent = new Date().toLocaleTimeString([], { hour12: false });
       showAlert(null);
       $('osd-readings').replaceChildren(...readingRows(demoReadings()));
-      $('osd-gps').replaceChildren(line(`ALT ${fly.alt} M`), line(`SPD ${fly.speed} M/S`), ...latLon(demoGps()).map(line));
+      const hdg = String(Math.round(((fly.heading * 180 / Math.PI) % 360 + 360) % 360) % 360).padStart(3, '0');
+      $('osd-gps').replaceChildren(line(`ALT ${fly.alt.toFixed(1)} M`), line(`SPD ${Math.hypot(fly.vx, fly.vy).toFixed(1)} M/S`),
+        line(`HDG ${hdg}`), ...latLon(demoGps()).map(line));
       return;
     }
     if (!live) {
@@ -120,33 +125,76 @@
     for (const p of fly.trail) {
       mapCtx.fillRect(size / 2 + (p.x - fly.x) / mPerPx - 1, size / 2 - (p.y - fly.y) / mPerPx - 1, 2, 2);
     }
+    // the drone, pointing where it is heading (map is north-up)
+    mapCtx.save();
+    mapCtx.translate(60, 60);
+    mapCtx.rotate(fly.heading);
     mapCtx.beginPath();
-    mapCtx.moveTo(60, 52); mapCtx.lineTo(66, 66); mapCtx.lineTo(54, 66); mapCtx.closePath();
+    mapCtx.moveTo(0, -8); mapCtx.lineTo(6, 6); mapCtx.lineTo(-6, 6); mapCtx.closePath();
     mapCtx.fillStyle = '#e8a92a'; mapCtx.strokeStyle = '#000'; mapCtx.lineWidth = 1.5;
     mapCtx.fill(); mapCtx.stroke();
+    mapCtx.restore();
+  }
+
+  // ---------- flight physics ----------
+  // A simple quadcopter: steering turns it (yaw), speed is reached with limited acceleration so it drifts in
+  // turns, and the body tilts into the thrust it needs (accelerating, holding speed against drag, turning),
+  // which banks and pitches the camera. Altitude eases to the slider at a limited climb rate.
+  const PHYS = {
+    g: 9.81,
+    maxYawRate: 0.85,   // rad/s at full steer (about 49 degrees per second)
+    yawTau: 0.3,        // s, how quickly the turn rate builds up
+    accelK: 1.1,        // 1/s, how hard it chases the target speed
+    maxAccel: 5,        // m/s^2
+    dragK: 0.22,        // 1/s, air drag the motors push against
+    climbK: 1.2,        // 1/s
+    maxClimb: 3,        // m/s
+    climbTau: 0.35,     // s
+    attTau: 0.18,       // s, how quickly the body tilt follows
+    camDown: 0.12,      // rad, the camera's downward tilt when hovering (about 7 degrees)
+  };
+
+  function step(dt, steer, speedSet, altSet) {
+    const P = PHYS;
+    fly.yawRate += (steer * P.maxYawRate - fly.yawRate) * (1 - Math.exp(-dt / P.yawTau));
+    fly.heading += fly.yawRate * dt;
+    const hx = Math.sin(fly.heading), hy = Math.cos(fly.heading);
+    let ax = (hx * speedSet - fly.vx) * P.accelK, ay = (hy * speedSet - fly.vy) * P.accelK;
+    const a = Math.hypot(ax, ay);
+    if (a > P.maxAccel) { ax *= P.maxAccel / a; ay *= P.maxAccel / a; }
+    fly.vx += ax * dt; fly.vy += ay * dt;
+    fly.x += fly.vx * dt; fly.y += fly.vy * dt;
+    const vzSet = Math.max(-P.maxClimb, Math.min(P.maxClimb, (altSet - fly.alt) * P.climbK));
+    fly.vz += (vzSet - fly.vz) * (1 - Math.exp(-dt / P.climbTau));
+    fly.alt += fly.vz * dt;
+    // horizontal thrust = acceleration + drag; split into forward (nose down) and sideways (bank)
+    const tx = ax + P.dragK * fly.vx, ty = ay + P.dragK * fly.vy;
+    const forward = tx * hx + ty * hy, right = tx * hy - ty * hx;
+    const b = 1 - Math.exp(-dt / P.attTau);
+    fly.pitch += (Math.atan2(forward, P.g) - fly.pitch) * b;
+    fly.roll += (Math.atan2(right, P.g) - fly.roll) * b;
   }
 
   // ---------- flight loop ----------
+  const view = FieldView.create($('view'), soilAt);
+  // only draw while the camera is on screen (phones scroll past it); the flight itself keeps going
+  let feedVisible = true;
+  if ('IntersectionObserver' in window) new IntersectionObserver(([e]) => { feedVisible = e.isIntersecting; }).observe(feed);
   let lastFrame = performance.now(), lastOsd = 0, lastMap = 0, lastTrail = 0;
   function frame(now) {
-    const dt = Math.min(0.1, (now - lastFrame) / 1000);
+    const dt = Math.min(0.05, (now - lastFrame) / 1000);
     lastFrame = now;
+    if (mode === 'demo') step(dt, fly.steer, fly.speed, fly.altSet);
+    else step(dt, 0, reduceMotion ? 0 : 5, 8); // live: a calm, straight survey pass behind the real readings
+    // a little motor vibration, stronger at speed (none with reduced motion)
+    const t = now / 1000;
+    const buzz = reduceMotion ? 0 : 0.0018 * (0.5 + Math.hypot(fly.vx, fly.vy) / 12);
+    if (feedVisible) view.render({
+      x: fly.x, y: fly.y, alt: Math.max(0.5, fly.alt), heading: fly.heading, time: t,
+      pitch: PHYS.camDown + fly.pitch + buzz * (Math.sin(t * 41) + Math.sin(t * 67 + 1)),
+      roll: fly.roll + buzz * (Math.sin(t * 53 + 2) + Math.sin(t * 29)),
+    });
     if (mode === 'demo') {
-      fly.x += fly.steer * 6 * dt;
-      fly.y += fly.speed * dt;
-    } else if (!reduceMotion) {
-      fly.y += 5 * dt;
-    }
-    const rowPx = 34 * (8 / fly.alt);
-    const pxPerM = rowPx / ROW_M;
-    feed.style.setProperty('--row', `${rowPx.toFixed(2)}px`);
-    feed.style.setProperty('--x', `${(-(fly.x * pxPerM) % rowPx).toFixed(2)}px`);
-    feed.style.setProperty('--y', `${((fly.y * pxPerM) % (rowPx * 3.5)).toFixed(2)}px`);
-    feed.style.setProperty('--roll', `${mode === 'demo' ? -fly.steer * 7 : 0}deg`);
-    if (mode === 'demo') {
-      const [crop, dark] = zone(soilAt(fly.x, fly.y));
-      feed.style.setProperty('--crop', crop);
-      feed.style.setProperty('--crop-dark', dark);
       if (now - lastTrail > 400) { lastTrail = now; fly.trail.push({ x: fly.x, y: fly.y }); if (fly.trail.length > 90) fly.trail.shift(); }
       if (now - lastMap > 100) { lastMap = now; drawMinimap(); }
       if (now - lastOsd > 250) { lastOsd = now; renderOsd(); }
@@ -171,11 +219,7 @@
     $('mode-demo').setAttribute('aria-pressed', String(mode === 'demo'));
     $('controls').hidden = mode !== 'demo';
     $('minimap').hidden = mode !== 'demo';
-    if (mode === 'live') {
-      feed.style.removeProperty('--crop');
-      feed.style.removeProperty('--crop-dark');
-      fly.steer = 0;
-    }
+    if (mode === 'live') fly.steer = 0;
     updateNotes();
     renderOsd();
   }
@@ -230,9 +274,9 @@
   const speed = $('speed'), alt = $('alt');
   speed.value = fly.speed;
   const syncSliders = () => {
-    fly.speed = Number(speed.value); fly.alt = Number(alt.value);
+    fly.speed = Number(speed.value); fly.altSet = Number(alt.value);
     $('speed-out').textContent = `${fly.speed} m/s`;
-    $('alt-out').textContent = `${fly.alt} m`;
+    $('alt-out').textContent = `${fly.altSet} m`;
   };
   speed.addEventListener('input', syncSliders);
   alt.addEventListener('input', syncSliders);

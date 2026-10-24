@@ -53,13 +53,8 @@
       </div>
 
       <div class="feed" id="feed" tabindex="0" aria-label="Drone camera view. In demo mode use the arrow keys to steer and change speed, and W and S to change altitude.">
-        <div class="world" id="world" aria-hidden="true">
-          <div class="ground"></div>
-          <svg class="treeline" viewBox="0 0 1200 24" preserveAspectRatio="none" aria-hidden="true">
-            <path fill="#5d7457" d="M0 24V12 L40 11 L65 7 L103 10 L126 15 L170 9 L201 13 L247 5 L287 7 L334 6 L376 10 L403 5 L461 16 L486 9 L544 6 L581 11 L628 7 L655 16 L693 7 L735 8 L761 13 L795 8 L818 15 L848 15 L887 7 L931 9 L981 12 L1006 7 L1044 5 L1066 9 L1113 12 L1171 8 L1200 10 V24z"/>
-          </svg>
-        </div>
-        <div class="haze" aria-hidden="true"></div>
+        <!-- the farm, rendered in perspective by js/field-view.js -->
+        <canvas class="view" id="view" aria-hidden="true"></canvas>
         <div class="vignette" aria-hidden="true"></div>
         <canvas class="minimap" id="minimap" width="120" height="120" aria-hidden="true"></canvas>
 
@@ -149,6 +144,7 @@
   </section>
 
   <script src="js/common.js"></script>
+  <script src="js/field-view.js"></script>
   <script src="js/landing.js"></script>
 </body>
 </html>
