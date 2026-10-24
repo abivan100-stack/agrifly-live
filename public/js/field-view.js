@@ -1,10 +1,13 @@
-// Drone camera view of a crop field, drawn pixel by pixel on a small canvas.
+// Drone camera view of a crop field, drawn pixel by pixel.
 // For each pixel a ray goes from the camera to the ground plane (like a flight sim's "mode 7"), so height,
 // turning, pitch and bank all change the picture the way a real FPV camera would.
 // World: x = east, y = north, z = up, in metres. Fields of crop rows 0.75 m apart (north-south or east-west),
 // separated by farm tracks, with tramlines, a tree line, drifting cloud shadows and haze.
-// The per-pixel code avoids Math.hypot, array loops and sine-based noise on purpose: it runs ~60k times a frame.
-window.FieldView = (() => {
+//
+// This file runs in two places: on the page (createView: sizing, scheduling, drawing to the canvas) and inside
+// js/field-worker.js (createRenderer: the per-pixel work), so several CPU cores can each draw a band of rows.
+// The per-pixel code avoids Math.hypot, array loops and sine-based noise on purpose: it runs for every pixel.
+(function (root) {
   const ROW_M = 0.75;                     // row spacing
   const FIELD_W = 140, FIELD_H = 220;     // one field, between farm tracks
   const TRACK = 5;                        // farm track width
@@ -30,6 +33,13 @@ window.FieldView = (() => {
   const HZ = [206, 215, 207];                          // haze
   const SL = [214, 224, 221], SH = [124, 161, 184];    // sky near the horizon, sky overhead
   const TE = [76, 99, 72];                             // tree line
+
+  // Soil moisture (% est.) across the simulated farm: smooth wet and dry zones.
+  // The demo readings, the minimap and the camera view all use this one function.
+  function soilAt(x, y) {
+    const m = 46 + 24 * Math.sin(x / 70 + 0.6) * Math.cos(y / 120) + 12 * Math.sin((x + y) / 45) + 6 * Math.cos(y / 33);
+    return Math.min(95, Math.max(5, m));
+  }
 
   // A smooth world-space pattern, precomputed on a grid around the camera and blended (bilinear).
   // Soil zones and cloud shadows change over tens of metres, so an 8 m grid looks the same as computing
@@ -63,27 +73,14 @@ window.FieldView = (() => {
     return { ensure, at };
   }
 
-  // cloud shadow strength 0..1 (the pattern drifts with the wind; see render)
+  // cloud shadow strength 0..1 (the pattern drifts with the wind; see renderRows)
   const cloudAt = (x, y) => smooth(0.35, 0.8, 0.5 + 0.5 * Math.sin(x / 95) * Math.sin(y / 130));
   const WIND_X = 0.9, WIND_Y = 0.6;     // m/s, how fast the cloud shadows drift
 
-  function create(canvas, soilAt) {
+  // The per-pixel renderer. Works on any rows of a W x H picture, so the picture can be split into bands.
+  function createRenderer() {
     const soilGrid = gridField((x, y) => soilAt(x, y) / 100);
     const cloudGrid = gridField(cloudAt);
-    const ctx = canvas.getContext('2d');
-    let W = 0, H = 0, img = null, buf = null, width = 320, slow = 0;
-
-    function resize() {
-      const r = canvas.getBoundingClientRect();
-      if (!r.width || !r.height) return false;
-      const h = Math.round(Math.min(width * 1.25, Math.max(width * 0.4, (width * r.height) / r.width)));
-      if (width !== W || h !== H) {
-        W = canvas.width = width; H = canvas.height = h;
-        img = ctx.createImageData(W, H);
-        buf = new Uint32Array(img.data.buffer);
-      }
-      return true;
-    }
 
     // sky, or the tree line along the horizon; e = sine of the elevation angle, pe = how much e one pixel spans
     function sky(dx, dy, e, pe) {
@@ -161,9 +158,9 @@ window.FieldView = (() => {
       return rgb(r + (HZ[0] - r) * fog, g + (HZ[1] - g) * fog, b + (HZ[2] - b) * fog);
     }
 
+    // Draw rows y0..y1 of a W x H picture into buf (Uint32Array of W * (y1 - y0) ABGR pixels).
     // cam = { x, y, alt, heading (rad, 0 = north, clockwise), pitch (rad, camera tilted down), roll (rad, right wing down), time (s) }
-    function render(cam) {
-      if (!resize()) return;
+    function renderRows(cam, W, H, y0, y1, buf) {
       const tanH = Math.tan(FOV_H / 2), tanV = (tanH * H) / W;
       const sh = Math.sin(cam.heading), ch = Math.cos(cam.heading);
       const sp = Math.sin(cam.pitch), cp = Math.cos(cam.pitch);
@@ -178,9 +175,8 @@ window.FieldView = (() => {
       const alt = cam.alt, camX = cam.x, camY = cam.y, time = cam.time;
       soilGrid.ensure(camX, camY);
       cloudGrid.ensure(camX - time * WIND_X, camY - time * WIND_Y);
-      const t0 = performance.now();
       let k = 0;
-      for (let py = 0; py < H; py++) {
+      for (let py = y0; py < y1; py++) {
         const v = (1 - (2 * (py + 0.5)) / H) * tanV;
         for (let px = 0; px < W; px++, k++) {
           const u = ((2 * (px + 0.5)) / W - 1) * tanH;
@@ -195,14 +191,114 @@ window.FieldView = (() => {
           buf[k] = ground(camX + t * dx, camY + t * dy, hx * along + hy * across, hy * along + hx * across, dist, time);
         }
       }
-      ctx.putImageData(img, 0, 0);
-      // keep it smooth on slow machines: fewer pixels if frames take too long, more again when there is room
-      slow = slow * 0.9 + (performance.now() - t0) * 0.1;
-      if (slow > 12 && width > 200) { width -= 40; slow = 6; } else if (slow < 4 && width < 320) { width += 40; slow = 6; }
     }
 
-    return { render };
+    return { renderRows };
   }
 
-  return { create };
-})();
+  // where this script was loaded from, so the worker is found next to it
+  const SCRIPT_URL = typeof document !== 'undefined' && document.currentScript ? document.currentScript.src : null;
+
+  // On the page: size the picture to the screen, hand bands of rows to workers (one per spare CPU core),
+  // and put the finished frame on the canvas. Resolution adapts so frames keep up with the display.
+  function createView(canvas) {
+    const ctx = canvas.getContext('2d');
+    const MIN_W = 240, MAX_W = 960;     // picture width limits in pixels
+    let W = 0, H = 0, img = null, frame = null;
+    let quality = 0.7;                  // share of the screen's real pixels to draw (adapts 0.35..1)
+    let avgMs = 0, warmup = 6;          // frame time average; the first frames build caches, so they don't count
+    let lastChange = 0;                 // at most one resolution change a second, so it settles instead of flipping
+    let local = null;                   // renderer on this thread, if workers can't be used
+
+    // background workers
+    let workers = [], busy = 0, started = 0, mixed = false; // mixed: a band came back at an old size
+    const spare = [];
+    function stopWorkers() { workers.forEach((w) => w.terminate()); workers = []; busy = 0; }
+    if (typeof Worker !== 'undefined' && SCRIPT_URL) {
+      try {
+        const n = Math.max(1, Math.min(4, (navigator.hardwareConcurrency || 2) - 1));
+        const url = new URL('field-worker.js', SCRIPT_URL);
+        for (let i = 0; i < n; i++) {
+          const w = new Worker(url);
+          w.onmessage = onBand;
+          w.onerror = stopWorkers; // e.g. blocked or failed to load: fall back to drawing on this thread
+          workers.push(w);
+        }
+      } catch { stopWorkers(); }
+    }
+
+    function resize() {
+      const r = canvas.getBoundingClientRect();
+      if (!r.width || !r.height) return false;
+      const dpr = Math.min(self.devicePixelRatio || 1, 2);
+      const w = Math.max(MIN_W, Math.min(MAX_W, Math.round((r.width * dpr * quality) / 16) * 16));
+      const h = Math.max(16, Math.round((w * r.height) / r.width));
+      if (w !== W || h !== H) {
+        W = w; H = h; // the canvas itself is resized in show(), together with the first frame at the new size
+        img = ctx.createImageData(W, H);
+        frame = new Uint32Array(img.data.buffer);
+      }
+      return true;
+    }
+
+    // more pixels while frames come in fast, fewer when they fall behind (aim: about 60 frames a second)
+    function adapt(ms) {
+      if (warmup > 0) { warmup--; return; }
+      avgMs = avgMs ? avgMs * 0.85 + ms * 0.15 : ms;
+      const now = performance.now();
+      if (now - lastChange < 1000) return;
+      if (avgMs > 20 && quality > 0.35) { quality = Math.max(0.35, quality - 0.1); avgMs = 0; lastChange = now; }
+      else if (avgMs < 10 && quality < 1) { quality = Math.min(1, quality + 0.05); avgMs = 0; lastChange = now; }
+    }
+
+    // resizing a canvas clears it, so the size changes in the same step as drawing the new frame (no blank flash)
+    function show() {
+      if (canvas.width !== W || canvas.height !== H) { canvas.width = W; canvas.height = H; }
+      ctx.putImageData(img, 0, 0);
+    }
+
+    function onBand(e) {
+      const { i, w, h, y0, buf } = e.data;
+      spare[i] = buf;
+      if (w === W && h === H) frame.set(new Uint32Array(buf), y0 * W); // a band drawn for an old size is dropped
+      else mixed = true;
+      if (--busy === 0) {
+        if (!mixed) show(); // an incomplete frame is never shown; the previous one stays up
+        adapt(performance.now() - started);
+      }
+    }
+
+    function render(cam) {
+      if (!resize()) return;
+      if (!workers.length) {
+        local ??= createRenderer();
+        const t0 = performance.now();
+        local.renderRows(cam, W, H, 0, H, frame);
+        show();
+        adapt(performance.now() - t0);
+        return;
+      }
+      if (busy) return; // the last frame is still being drawn: skip this one, the page stays smooth
+      started = performance.now();
+      mixed = false;
+      const step = Math.ceil(H / workers.length);
+      const jobs = [];
+      for (let i = 0; i < workers.length; i++) {
+        const y0 = i * step, y1 = Math.min(H, y0 + step);
+        if (y0 < y1) jobs.push([i, y0, y1]);
+      }
+      busy = jobs.length;
+      for (const [i, y0, y1] of jobs) {
+        const bytes = W * (y1 - y0) * 4;
+        const buf = spare[i] && spare[i].byteLength === bytes ? spare[i] : new ArrayBuffer(bytes);
+        spare[i] = null;
+        workers[i].postMessage({ i, cam, w: W, h: H, y0, y1, buf }, [buf]);
+      }
+    }
+
+    // size and how it's drawn, for checking in the browser console
+    return { render, get stats() { return { width: W, height: H, workers: workers.length, quality }; } };
+  }
+
+  root.FieldView = { soilAt, createRenderer, createView };
+})(self);

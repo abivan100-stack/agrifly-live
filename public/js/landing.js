@@ -19,11 +19,8 @@
     steer: 0, speed: reduceMotion ? 0 : 5, altSet: 8, trail: [],
   };
 
-  // ---------- simulated field: smooth dry/wet zones ----------
-  function soilAt(x, y) {
-    const m = 46 + 24 * Math.sin(x / 70 + 0.6) * Math.cos(y / 120) + 12 * Math.sin((x + y) / 45) + 6 * Math.cos(y / 33);
-    return Math.min(95, Math.max(5, m));
-  }
+  // ---------- simulated field: smooth dry/wet zones (shared with the camera view in field-view.js) ----------
+  const { soilAt } = FieldView;
   function demoReadings() {
     const m = soilAt(fly.x, fly.y);
     const t = 33.5 - m * 0.07 + 0.8 * Math.sin(fly.y / 90);
@@ -176,7 +173,7 @@
   }
 
   // ---------- flight loop ----------
-  const view = FieldView.create($('view'), soilAt);
+  const view = FieldView.createView($('view')); // draws on background workers when it can
   // only draw while the camera is on screen (phones scroll past it); the flight itself keeps going
   let feedVisible = true;
   if ('IntersectionObserver' in window) new IntersectionObserver(([e]) => { feedVisible = e.isIntersecting; }).observe(feed);
