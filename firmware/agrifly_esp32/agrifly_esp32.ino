@@ -16,7 +16,7 @@
   Blynk datastreams (template): V0 Integer 0-1, V6 Integer 0-4095, V7 Double 0-180, V10 String.
 
   Wiring:
-    IR obstacle sensor: VCC -> 3V3, GND -> GND, OUT -> GPIO 27
+    IR obstacle sensor: VCC -> 3V3, GND -> GND, OUT -> GPIO 27 (internal pull-up: reads "clear" when unplugged)
     MPU6050 (GY-521):   VCC -> 3V3, GND -> GND, SDA -> GPIO 21, SCL -> GPIO 22, AD0 -> GND
     MQ-135:             VCC -> VIN (5 V), GND -> GND, AO -> 10 kOhm -> GPIO 35 -> 20 kOhm -> GND
                         (the divider keeps the 5 V sensor output safe for the ESP32 pin)
@@ -240,7 +240,9 @@ void checkWiFi() {
 
 void setup() {
   Serial.begin(115200);
-  pinMode(IR_PIN, INPUT);
+  // Pull-up: with no IR module plugged in the pin would float and read random LOWs, which count as
+  // "object detected". Pulled up, an empty pin reads HIGH = clear; a connected module still pulls it LOW.
+  pinMode(IR_PIN, INPUT_PULLUP);
 
   pinMode(GAS_PIN, INPUT);
   analogReadResolution(12);                       // 0-4095
