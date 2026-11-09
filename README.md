@@ -2,6 +2,8 @@
 
 **Smarter Technology for Smarter Farming** .
 
+**Live dashboard:** <https://agrifly-live.vercel.app/>
+
 AgriFly is an IoT field-monitoring system. An FPV drone carries an ESP32 with sensors and sends readings to a
 live dashboard. Right now we are testing with an **MQ-135 gas sensor** (raw ADC level, not ppm) and an
 **MPU6050 tilt sensor** (degrees from level).
@@ -57,7 +59,7 @@ New sensor cards appear by themselves. `npm run simulate` without `--all` serves
 ## Two ways to run
 
 The same code runs in both places. The server checks `process.env.VERCEL` and the pages ask `/api/config`,
-so nothing needs switching by hand.
+so nothing needs switching by hand. The public deployment is <https://agrifly-live.vercel.app/>.
 
 | | Local (`npm start` on a laptop) | Vercel (public link) |
 |---|---|---|
